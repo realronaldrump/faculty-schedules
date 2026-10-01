@@ -27,7 +27,7 @@ import { formatDateKeyInTimeZone } from "./activityAnalytics";
 export const ROLLUP_SCHEMA_VERSION = 3;
 export const SUMMARY_LOOKBACK_DAYS = 90;
 
-const EVENT_RETENTION_DAYS = 180;
+export const EVENT_RETENTION_DAYS = 180;
 const EVENT_PAGE_SIZE = 1000;
 const ROLLUP_QUERY_PAGE_SIZE = 500;
 const WRITE_BATCH_SIZE = 425;

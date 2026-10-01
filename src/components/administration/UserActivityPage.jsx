@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Activity, LayoutDashboard, RefreshCw, Users } from "lucide-react";
+import { Activity, Download, LayoutDashboard, RefreshCw, Users } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import SelectDropdown from "../SelectDropdown";
 import useActivityExplorerData from "../../hooks/useActivityExplorerData";
@@ -18,6 +18,7 @@ import {
   saveActivityPreferences,
 } from "../../utils/activityConsoleStorage";
 import { getNavigationMeta } from "../../utils/navigationMeta";
+import { downloadTextFile } from "../../utils/csvUtils";
 import { formatDateTime } from "./user-activity/activityDisplay";
 import ExplorerOverview, {
   AttentionSection,
@@ -42,6 +43,10 @@ const UserActivityPage = () => {
   const [previousVisit] = useState(preferences.lastVisit);
   const [copied, setCopied] = useState("");
   const [storageError, setStorageError] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState("");
+  const exportController = useRef(null);
+  useEffect(() => () => exportController.current?.abort(), []);
   const [visibleVisitCount, setVisibleVisitCount] = useState(20);
   const recordedVisit = useRef(false);
   const view = VIEWS.some((item) => item.id === params.get("view"))
@@ -219,6 +224,51 @@ const UserActivityPage = () => {
     }
   };
 
+  const exportActivity = async () => {
+    if (exporting || !isActivityOwner) return;
+    const controller = new AbortController();
+    exportController.current = controller;
+    setExporting(true);
+    setExportStatus("Preparing export…");
+    // Capture scope and summary references before pagination or a refresh can
+    // change the selected period. The hook cancels if that period changes.
+    const options = {
+      summaries: data.summaries,
+      presence: data.presence,
+      tutorials: data.tutorials,
+      errors: data.errors,
+      sourceUpdatedAt: data.sourceUpdatedAt,
+      historyUpdatedAt: data.history.updatedAt,
+      generatedAt: new Date(),
+      scope: {
+        startDateKey: window.startDateKey, endDateKey: window.endDateKey,
+        sinceMs: window.sinceMs, ownerUid: user?.uid, excludeOwner, person, feature,
+      },
+    };
+    try {
+      const { createActivityExportArchive } = await import("../../utils/activityExport");
+      const history = await data.loadExportHistory({
+        signal: controller.signal,
+        onProgress: ({ documentsFetched }) => setExportStatus(`Preparing export… ${documentsFetched.toLocaleString()} older events loaded.`),
+      });
+      if (controller.signal.aborted) return;
+      setExportStatus("Creating download…");
+      const result = await createActivityExportArchive({ ...options, history });
+      if (controller.signal.aborted) return;
+      downloadTextFile(result.blob, result.filename, "application/zip");
+      setExportStatus(`Export downloaded. ${result.summary.eventsExported.toLocaleString()} ${result.summary.eventsExported === 1 ? "event" : "events"} and ${result.summary.userDayRows.toLocaleString()} daily ${result.summary.userDayRows === 1 ? "record" : "records"}.${
+        result.summary.eventHistoryComplete ? "" : " Event history is partial; see the coverage notes in the download."
+      }${Object.values(options.errors).some(Boolean) ? " Some sources could not refresh; see the coverage notes." : ""}`);
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setExportStatus(error.name === "AbortError"
+          ? "The activity period changed. Export again for the current period."
+          : error.message || "Could not create the export. Try again.");
+    } finally {
+      if (!controller.signal.aborted) setExporting(false);
+    }
+  };
+
   if (!isActivityOwner)
     return (
       <div className="activity-empty">
@@ -237,14 +287,24 @@ const UserActivityPage = () => {
             needs a closer look.
           </p>
         </div>
-        <button
-          className="activity-icon-button"
-          onClick={data.refresh}
-          aria-label="Refresh activity data"
-          disabled={data.loading || data.historyLoading}
-        >
-          <RefreshCw size={18} className={data.loading ? "animate-spin" : ""} />
-        </button>
+        <div className="activity-header-actions">
+          <button
+            className="activity-button"
+            onClick={exportActivity}
+            disabled={exporting || data.loading || data.historyLoading || data.loadingMore}
+          >
+            <Download size={17} aria-hidden="true" />
+            {exporting ? "Exporting…" : "Export"}
+          </button>
+          <button
+            className="activity-icon-button"
+            onClick={data.refresh}
+            aria-label="Refresh activity data"
+            disabled={exporting || data.loading || data.historyLoading || data.loadingMore}
+          >
+            <RefreshCw size={18} className={data.loading ? "animate-spin" : ""} />
+          </button>
+        </div>
       </header>
       <div className="activity-toolbar">
         <label htmlFor="activity-range">Period</label>
@@ -291,6 +351,7 @@ const UserActivityPage = () => {
         {window.clipped &&
           " Only the latest 90 days of summaries are available."}
       </p>
+      {exportStatus && <p className="activity-notice" role="status">{exportStatus}</p>}
       {Object.entries(data.errors)
         .filter(([, message]) => message)
         .map(([key, message]) => (

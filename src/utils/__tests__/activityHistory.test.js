@@ -56,4 +56,15 @@ describe("activity history pagination", () => {
       }),
     ).toMatchObject({ rows: [], hasMore: false, cursor: null });
   });
+  it("honors the remaining export budget instead of requesting a full page", async () => {
+    mocks.getDocs.mockResolvedValue({ docs: [{ id: "last", data: () => ({ uid: "staff" }) }] });
+    const result = await loadActivityHistoryPage({ startDateKey: "2026-09-01", endDateKey: "2026-09-10", pageSize: 1 });
+    expect(mocks.getDocs.mock.calls[0][0]).toContainEqual({ limit: 1 });
+    expect(result.hasMore).toBe(true);
+  });
+  it("rejects invalid page limits before performing reads", async () => {
+    for (const pageSize of [0, -1, 201, 1.5, NaN])
+      await expect(loadActivityHistoryPage({ startDateKey: "2026-09-01", endDateKey: "2026-09-10", pageSize })).rejects.toThrow(/page size/);
+    expect(mocks.getDocs).not.toHaveBeenCalled();
+  });
 });

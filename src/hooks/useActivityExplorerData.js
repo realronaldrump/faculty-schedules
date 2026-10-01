@@ -9,6 +9,7 @@ import {
 } from "../utils/activitySync";
 import { loadActivityHistoryPage } from "../utils/activityHistory";
 import { mergeEventPages, timestampMs } from "../utils/activityExplorer";
+import { collectActivityExportHistory } from "../utils/activityExportHistory";
 
 const EMPTY_SUMMARIES = {
   todayDateKey: "",
@@ -44,6 +45,7 @@ export default function useActivityExplorerData({
   const [loadingMore, setLoadingMore] = useState(false);
   const [errors, setErrors] = useState({});
   const [updatedAt, setUpdatedAt] = useState(null);
+  const [sourceUpdatedAt, setSourceUpdatedAt] = useState({});
   const [refreshKey, setRefreshKey] = useState(0);
   const historyRef = useRef(EMPTY_HISTORY);
   const windowRef = useRef("");
@@ -81,6 +83,15 @@ export default function useActivityExplorerData({
         ...(full ? [getDocs(collection(db, "tutorialProgress"))] : []),
       ]);
       if (!active) return;
+      const loadedAt = new Date();
+      setSourceUpdatedAt((current) => ({
+        ...current,
+        ...(results[0].status === "fulfilled"
+          ? { todaySummary: loadedAt, ...(full ? { historicalSummaries: loadedAt } : {}) }
+          : {}),
+        ...(results[1].status === "fulfilled" ? { presence: loadedAt } : {}),
+        ...(results[2]?.status === "fulfilled" ? { tutorials: loadedAt } : {}),
+      }));
       if (results[0].status === "fulfilled") {
         const next = results[0].value;
         todayKey = next.todayDateKey;
@@ -250,6 +261,34 @@ export default function useActivityExplorerData({
     }
   }, [enabled, startDateKey, endDateKey, loadingMore, historyLoading]);
 
+  const loadExportHistory = useCallback(async ({ onProgress, signal } = {}) => {
+    if (!enabled || historyBusyRef.current || historyLoading)
+      throw new Error("Wait for the activity history to finish loading, then export again.");
+    const token = requestRef.current;
+    historyBusyRef.current = true;
+    setLoadingMore(true);
+    try {
+      return await collectActivityExportHistory({
+        history: historyRef.current,
+        startDateKey,
+        endDateKey,
+        loadPage: loadActivityHistoryPage,
+        onProgress,
+        isCancelled: () => signal?.aborted || token !== requestRef.current,
+        onPage: (next) => {
+          // Keep fetched pages in the console so repeated exports reuse them.
+          historyRef.current = { ...next, updatedAt: historyRef.current.updatedAt };
+          setHistory(historyRef.current);
+        },
+      });
+    } finally {
+      if (token === requestRef.current) {
+        historyBusyRef.current = false;
+        setLoadingMore(false);
+      }
+    }
+  }, [enabled, startDateKey, endDateKey, historyLoading]);
+
   return {
     summaries,
     presence,
@@ -260,8 +299,10 @@ export default function useActivityExplorerData({
     loadingMore,
     errors,
     updatedAt,
+    sourceUpdatedAt,
     refresh,
     loadMore,
+    loadExportHistory,
     oldestEvent: history.rows.reduce(
       (oldest, row) =>
         !oldest || timestampMs(row.timestamp) < timestampMs(oldest)

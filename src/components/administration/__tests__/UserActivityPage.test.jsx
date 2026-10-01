@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   summaries: vi.fn(),
   today: vi.fn(),
   history: vi.fn(),
+  archive: vi.fn(),
+  download: vi.fn(),
   owner: true,
 }));
 vi.mock("../../../contexts/AuthContext.jsx", () => ({
@@ -37,7 +39,15 @@ vi.mock("../../../utils/activitySync", () => ({
   loadTodayActivitySummary: (...args) => mocks.today(...args),
 }));
 vi.mock("../../../utils/activityHistory", () => ({
+  ACTIVITY_HISTORY_PAGE_SIZE: 200,
   loadActivityHistoryPage: (...args) => mocks.history(...args),
+}));
+vi.mock("../../../utils/activityExport", () => ({
+  createActivityExportArchive: (...args) => mocks.archive(...args),
+}));
+vi.mock("../../../utils/csvUtils", async (importOriginal) => ({
+  ...await importOriginal(),
+  downloadTextFile: (...args) => mocks.download(...args),
 }));
 import UserActivityPage from "../UserActivityPage";
 import {
@@ -145,6 +155,10 @@ describe("UserActivityPage connected exploration", () => {
       cursor: null,
       hasMore: false,
     });
+    mocks.archive.mockResolvedValue({
+      blob: new Blob(["export"]), filename: "activity.zip",
+      summary: { eventsExported: 2, userDayRows: 1, eventHistoryComplete: true },
+    });
   });
   afterEach(() => {
     cleanup();
@@ -174,6 +188,51 @@ describe("UserActivityPage connected exploration", () => {
     expect(
       screen.getByRole("button", { name: /People using the app 2/ }),
     ).toBeInTheDocument();
+  });
+
+  it("downloads from a simple Export button, preserving scope and reusing loaded events", async () => {
+    renderPage("?view=activity&range=7&person=staff&feature=scheduling%2Froom-grids&search=pdf&kind=errors");
+    await ready();
+    const callsBefore = mocks.history.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Export", exact: true }));
+    await screen.findByText(/Export downloaded/);
+    expect(mocks.history).toHaveBeenCalledTimes(callsBefore);
+    expect(mocks.archive.mock.calls[0][0]).toMatchObject({
+      scope: { person: "staff", feature: "scheduling/room-grids", excludeOwner: true },
+      history: { rows: events, coverage: { complete: true, documentsFetched: 0 } },
+    });
+    expect(mocks.archive.mock.calls[0][0].scope).not.toHaveProperty("search");
+    expect(mocks.download).toHaveBeenCalledWith(expect.any(Blob), "activity.zip", "application/zip");
+    expect(screen.queryByText(/\bAI\b/i)).not.toBeInTheDocument();
+  });
+
+  it("reuses export pagination on subsequent downloads", async () => {
+    const older = { ...events[0], id: "older" };
+    mocks.history.mockResolvedValueOnce({ rows: events, cursor: { id: "event-1" }, hasMore: true })
+      .mockResolvedValue({ rows: [older], cursor: null, hasMore: false });
+    renderPage();
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Export", exact: true }));
+    await screen.findByText(/Export downloaded/);
+    expect(mocks.history).toHaveBeenLastCalledWith(expect.objectContaining({ pageSize: 200, cursor: { id: "event-1" } }));
+    expect(mocks.archive.mock.calls[0][0].history.rows).toHaveLength(3);
+    const callsBefore = mocks.history.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Export", exact: true }));
+    await waitFor(() => expect(mocks.download).toHaveBeenCalledTimes(2));
+    expect(mocks.history).toHaveBeenCalledTimes(callsBefore);
+  });
+
+  it("exports available data with an explicit notice when extra reads reach the service limit", async () => {
+    mocks.history.mockResolvedValueOnce({ rows: events, cursor: { id: "event-1" }, hasMore: true })
+      .mockRejectedValue({ code: "resource-exhausted", message: "private database error" });
+    mocks.archive.mockResolvedValue({ blob: new Blob(), filename: "partial.zip",
+      summary: { eventsExported: 2, userDayRows: 1, eventHistoryComplete: false } });
+    renderPage();
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Export", exact: true }));
+    await screen.findByText(/Event history is partial/);
+    expect(mocks.archive.mock.calls[0][0].history.coverage).toMatchObject({ complete: false, errorCode: "resource-exhausted" });
+    expect(screen.queryByText(/private database error/)).not.toBeInTheDocument();
   });
 
   it("connects person details to feature details and filtered activity", async () => {

@@ -25,6 +25,13 @@
   gap: 1rem;
   margin-bottom: 1.5rem;
 }
+.activity-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
 .activity-page-header h1 {
   font-size: 1.9rem;
   font-weight: 700;
@@ -667,6 +674,9 @@
   margin-top: 0.6rem;
 }
 @media (max-width: 700px) {
+  .activity-page-header {
+    flex-wrap: wrap;
+  }
   .activity-page-header h1 {
     font-size: 1.55rem;
   }

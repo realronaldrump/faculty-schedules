@@ -18,6 +18,7 @@ import {
   addDoc,
   deleteField,
   where,
+  FieldPath,
 } from "firebase/firestore";
 import { logCreate, logUpdate, logDelete } from "../utils/changeLogger";
 import { useData } from "../contexts/DataContext";
@@ -680,7 +681,7 @@ const usePeopleOperations = () => {
 
   // Handle student update/create
   const handleStudentUpdate = useCallback(
-    async (studentToUpdate) => {
+    async (studentToUpdate, { semesterKey = null } = {}) => {
       const isNewStudent = !studentToUpdate.id;
       const requiredPermission = isNewStudent
         ? canCreateStudent()
@@ -693,7 +694,7 @@ const usePeopleOperations = () => {
           "Permission Denied",
           `You don't have permission to ${actionName} student workers.`,
         );
-        return;
+        throw Object.assign(new Error(`You don't have permission to ${actionName} student workers.`), { code: "permission-denied" });
       }
 
       console.log("🎓 Updating student worker:", studentToUpdate);
@@ -726,9 +727,16 @@ const usePeopleOperations = () => {
           normalizedStudentWithSchedules,
         );
 
-        const existingStudent = !isNewStudent
+        let existingStudent = !isNewStudent
           ? rawPeople.find((p) => p.id === studentToUpdate.id) || null
           : null;
+        if (!isNewStudent && !existingStudent) {
+          const snapshot = await getDoc(studentRef);
+          if (!snapshot.exists()) {
+            throw Object.assign(new Error("This student worker no longer exists. Reload the directory before trying again."), { code: "not-found" });
+          }
+          existingStudent = { ...snapshot.data(), id: snapshot.id };
+        }
         const fallbackIsActive = existingStudent?.isActive ?? true;
 
         const updateData = {
@@ -758,7 +766,7 @@ const usePeopleOperations = () => {
               "Missing Identifier",
               "New people records require at least one identifier (email, Baylor ID, or CLSS instructor ID).",
             );
-            return;
+            throw new Error("New student workers require an email, Baylor ID, or CLSS instructor ID.");
           }
 
           await setDoc(studentRef, createPayload);
@@ -770,74 +778,61 @@ const usePeopleOperations = () => {
             "usePeopleOperations - handleStudentUpdate",
           );
         } else {
-          const originalData = existingStudent;
-          if (!originalData) {
-            console.warn(
-              "⚠️ Provided student id not found; creating new student instead",
-            );
-            const createRef = doc(collection(db, "people"));
-            const createPayload = {
-              ...updateData,
-              createdAt: new Date().toISOString(),
-            };
-
-            if (!hasPersonCreateIdentifier(createPayload)) {
-              showNotification(
-                "error",
-                "Missing Identifier",
-                "New people records require at least one identifier (email, Baylor ID, or CLSS instructor ID).",
-              );
-              return;
-            }
-
-            await setDoc(createRef, createPayload);
-            await logCreate(
-              `Student - ${studentToUpdate.name}`,
-              "people",
-              createRef.id,
-              createPayload,
-              "usePeopleOperations - handleStudentUpdate",
-            );
-            await loadPeople({ force: true });
-            showNotification(
-              "success",
-              "Student Added",
-              `${studentToUpdate.name} has been added to the student worker directory successfully.`,
-            );
-            return;
-          }
-
           // Explicitly delete legacy top-level mirror fields that stripLegacyStudentMirrors
           // removed from the JS object — updateDoc only updates present fields, it does
           // NOT delete absent ones, so these would otherwise persist in Firestore.
-          await updateDoc(studentRef, {
+          const fields = {
             ...updateData,
             hourlyRate: deleteField(),
             jobTitle: deleteField(),
             supervisor: deleteField(),
             supervisorId: deleteField(),
-          });
+          };
+          if (semesterKey) {
+            // Update only the selected semester. A stale directory snapshot must
+            // not replace schedules saved for other semesters by another user.
+            const semesterEntry = fields.semesterSchedules?.[semesterKey];
+            if (!semesterEntry) throw new Error("The selected semester's job schedule is missing.");
+            delete fields.semesterSchedules;
+            await updateDoc(
+              studentRef,
+              new FieldPath("semesterSchedules", semesterKey),
+              semesterEntry,
+              ...Object.entries(fields).flatMap(([key, value]) => [new FieldPath(key), value]),
+            );
+          } else {
+            await updateDoc(studentRef, fields);
+          }
           await logUpdate(
             `Student - ${studentToUpdate.name}`,
             "people",
             studentToUpdate.id,
             updateData,
-            originalData,
+            existingStudent,
             "usePeopleOperations - handleStudentUpdate",
           );
         }
 
-        await loadPeople({ force: true });
+        let refreshFailed = false;
+        try {
+          await loadPeople({ force: true, throwOnError: true });
+        } catch (error) {
+          // The database already acknowledged the write. Reporting a failed
+          // create here would invite a retry that creates a duplicate person.
+          refreshFailed = true;
+          console.error("Student saved, but directory refresh failed:", error);
+        }
 
         const successMessage = isNewStudent
           ? `${studentToUpdate.name} has been added to the student worker directory successfully.`
           : `${studentToUpdate.name} has been updated successfully.`;
 
         showNotification(
-          "success",
-          isNewStudent ? "Student Added" : "Student Updated",
-          successMessage,
+          refreshFailed ? "warning" : "success",
+          refreshFailed ? "Student Saved" : isNewStudent ? "Student Added" : "Student Updated",
+          refreshFailed ? "Your changes were saved, but the directory could not refresh. Reload the page to see them." : successMessage,
         );
+        return { id: studentRef.id, refreshFailed };
       } catch (error) {
         console.error("❌ Error updating student:", error);
         const isPermission =
@@ -861,6 +856,7 @@ const usePeopleOperations = () => {
               : `Failed to update student worker. ${friendly}`,
           );
         }
+        throw error;
       }
     },
     [
@@ -883,7 +879,7 @@ const usePeopleOperations = () => {
           "Permission Denied",
           "You don't have permission to delete student workers.",
         );
-        return;
+        throw Object.assign(new Error("You don't have permission to delete student workers."), { code: "permission-denied" });
       }
 
       console.log("🗑️ Deleting student worker:", studentToDelete);
@@ -917,12 +913,14 @@ const usePeopleOperations = () => {
           "Student Deleted",
           `${entityName} has been removed from the directory.`,
         );
+        return true;
       } catch (error) {
         console.error("❌ Error deleting student:", error);
         const message =
           error?.message ||
           "Failed to delete student worker. Please try again.";
         showNotification("error", "Delete Failed", message);
+        throw error;
       }
     },
     [rawPeople, loadPeople, canDeleteStudent, showNotification],

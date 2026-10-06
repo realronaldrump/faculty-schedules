@@ -5,6 +5,8 @@ import TimelineVisualization from "./TimelineVisualization";
 import StatusBadge, { getStudentStatus } from "./StatusBadge";
 import Modal from "../shared/Modal";
 import { parseStudentWorkerDate } from "../../utils/studentWorkers";
+import useStudentJobEditor from "../../hooks/useStudentJobEditor";
+import useStudentSave from "../../hooks/useStudentSave";
 
 /**
  * StudentAddWizard - Step-by-step wizard for adding new student workers
@@ -38,18 +40,30 @@ const StudentAddWizard = ({
   isTutorialMode = false,
 }) => {
   const [currentStep, setCurrentStep] = useState(0);
-  const [student, setStudent] = useState({
-    name: isTutorialMode ? "[TUTORIAL] Test Student" : "",
-    email: isTutorialMode ? "tutorial.test@example.edu" : "",
-    phone: "",
-    hasNoPhone: isTutorialMode,
-    startDate: new Date().toISOString().split("T")[0],
-    endDate: "",
-    isActive: true,
-    jobs: [],
+  const [student, setStudent] = useState(() => {
+    const today = new Date();
+    const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    return {
+      name: isTutorialMode ? "[TUTORIAL] Test Student" : "",
+      email: isTutorialMode ? "tutorial.test@example.edu" : "",
+      phone: "",
+      hasNoPhone: isTutorialMode,
+      startDate: localDate,
+      endDate: "",
+      isActive: true,
+      jobs: [],
+    };
   });
   const [errors, setErrors] = useState({});
-  const [editingJobIndex, setEditingJobIndex] = useState(null);
+  const {
+    editor, jobError, collectJobs, commitJob, startNewJob,
+    startEditingJob, changeDraft, cancelJob, removeJob,
+  } = useStudentJobEditor(
+    student.jobs,
+    (jobs) => setStudent((prev) => ({ ...prev, jobs })),
+    student,
+  );
+  const { saveStudent, isSaving, saveError } = useStudentSave(onSave);
 
   const supervisorLabelById = useMemo(() => {
     return new Map(
@@ -67,28 +81,28 @@ const StudentAddWizard = ({
   };
 
   // Validation for each step
-  const validateStep = (stepIndex) => {
+  const validateStep = (stepIndex, candidate = student) => {
     const newErrors = {};
 
     if (stepIndex === 0) {
-      if (!student.name?.trim()) {
+      if (!candidate.name?.trim()) {
         newErrors.name = "Name is required";
       }
-      if (!student.email?.trim()) {
+      if (!candidate.email?.trim()) {
         newErrors.email = "Email is required";
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(student.email)) {
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate.email)) {
         newErrors.email = "Please enter a valid email address";
       }
-      if (!student.hasNoPhone && !student.phone?.trim()) {
+      if (!candidate.hasNoPhone && !candidate.phone?.trim()) {
         newErrors.phone = 'Phone number is required (or check "No Phone")';
       }
     }
 
     if (stepIndex === 1) {
       // Validate employment dates
-      if (student.startDate && student.endDate) {
-        const start = parseStudentWorkerDate(student.startDate);
-        const end = parseStudentWorkerDate(student.endDate);
+      if (candidate.startDate && candidate.endDate) {
+        const start = parseStudentWorkerDate(candidate.startDate);
+        const end = parseStudentWorkerDate(candidate.endDate);
         if (start && end && end < start) {
           newErrors.endDate = "End date cannot be before start date";
         }
@@ -96,7 +110,7 @@ const StudentAddWizard = ({
     }
 
     if (stepIndex === 2) {
-      const validJobs = (student.jobs || []).filter(
+      const validJobs = (candidate.jobs || []).filter(
         (job) =>
           job.jobTitle?.trim() ||
           job.supervisor?.trim() ||
@@ -115,7 +129,9 @@ const StudentAddWizard = ({
   };
 
   const handleNext = () => {
-    if (validateStep(currentStep)) {
+    const jobs = currentStep === 2 ? commitJob() : student.jobs;
+    if (!jobs) return;
+    if (validateStep(currentStep, { ...student, jobs })) {
       setCurrentStep((prev) => Math.min(prev + 1, STEPS.length - 1));
       setErrors({});
     }
@@ -137,24 +153,21 @@ const StudentAddWizard = ({
     });
   };
 
-  // Job management
-  const addJob = (job) => {
-    updateStudent({
-      jobs: [...student.jobs, { ...job, id: Date.now().toString() }],
-    });
-    setEditingJobIndex(null);
-  };
-
-  const updateJob = (index, updates) => {
-    const newJobs = [...student.jobs];
-    newJobs[index] = { ...newJobs[index], ...updates };
-    updateStudent({ jobs: newJobs });
-  };
-
-  const removeJob = (index) => {
-    updateStudent({
-      jobs: student.jobs.filter((_, i) => i !== index),
-    });
+  const handleSave = () => {
+    if (isSaving) return;
+    const jobs = collectJobs();
+    if (!jobs) {
+      setCurrentStep(2);
+      return;
+    }
+    const candidate = { ...student, jobs };
+    for (let step = 0; step < 3; step += 1) {
+      if (!validateStep(step, candidate)) {
+        setCurrentStep(step);
+        return;
+      }
+    }
+    saveStudent(candidate);
   };
 
   // Calculate totals
@@ -197,7 +210,11 @@ const StudentAddWizard = ({
 
   // Step Render Functions
   const renderBasicInfoStep = () => (
-    <div className="space-y-6" data-tutorial="basic-info-form">
+    <div
+      className="space-y-6"
+      data-tutorial="basic-info-form"
+      data-tutorial-ready={Boolean(student.name?.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(student.email) && (student.hasNoPhone || student.phone?.trim()))}
+    >
       <div className="text-center mb-8">
         <h3 className="text-lg font-semibold text-gray-900">
           Basic Information
@@ -361,7 +378,7 @@ const StudentAddWizard = ({
   );
 
   const renderJobsStep = () => (
-    <div className="space-y-6" data-tutorial="jobs-section">
+    <div className="space-y-6" data-tutorial="jobs-section" data-tutorial-ready={student.jobs.length > 0 && !editor}>
       <div className="text-center mb-4">
         <h3 className="text-lg font-semibold text-gray-900">Job Assignments</h3>
         <p className="text-sm text-gray-600">
@@ -375,14 +392,12 @@ const StudentAddWizard = ({
         {student.jobs.map((job, idx) => (
           <JobCard
             key={job.id}
-            job={job}
-            isEditing={editingJobIndex === idx}
-            onEdit={() => setEditingJobIndex(idx)}
-            onSave={(updatedJob) => {
-              updateJob(idx, updatedJob);
-              setEditingJobIndex(null);
-            }}
-            onCancel={() => setEditingJobIndex(null)}
+            job={editor?.index === idx ? editor.draft : job}
+            isEditing={editor?.index === idx}
+            onEdit={() => startEditingJob(idx)}
+            onSave={commitJob}
+            onCancel={cancelJob}
+            onDraftChange={changeDraft}
             onRemove={() => removeJob(idx)}
             availableBuildings={availableBuildings}
             supervisorOptions={supervisorOptions}
@@ -399,10 +414,11 @@ const StudentAddWizard = ({
       )}
 
       {/* Add Job Button */}
-      {editingJobIndex === null && (
-        <div className="max-w-2xl mx-auto" data-tutorial="add-job-btn">
+      {!editor && (
+        <div className="max-w-2xl mx-auto">
           <button
-            onClick={() => setEditingJobIndex("new")}
+            onClick={startNewJob}
+            data-tutorial="add-job-btn"
             className="w-full py-4 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-baylor-green hover:text-baylor-green transition-colors flex items-center justify-center gap-2"
           >
             <Plus size={20} />
@@ -412,22 +428,14 @@ const StudentAddWizard = ({
       )}
 
       {/* New Job Form */}
-      {editingJobIndex === "new" && (
+      {editor?.index === "new" && (
         <div className="max-w-2xl mx-auto">
           <JobCard
-            job={{
-              jobTitle: "",
-              supervisor: "",
-              supervisorId: "",
-              hourlyRate: "",
-              buildings: [],
-              weeklySchedule: [],
-              startDate: student.startDate,
-              endDate: student.endDate,
-            }}
+            job={editor.draft}
             isEditing={true}
-            onSave={addJob}
-            onCancel={() => setEditingJobIndex(null)}
+            onSave={commitJob}
+            onCancel={cancelJob}
+            onDraftChange={changeDraft}
             availableBuildings={availableBuildings}
             supervisorOptions={supervisorOptions}
             existingJobTitles={existingJobTitles}
@@ -587,11 +595,14 @@ const StudentAddWizard = ({
   return (
     <Modal
       isOpen
-      onClose={onCancel}
+      onClose={isSaving ? undefined : onCancel}
+      closeOnEsc={!isSaving}
+      closeOnOverlayClick={!isSaving}
       size="lg"
       showClose={false}
       bodyClassName="flex flex-col"
     >
+      <fieldset disabled={isSaving} className="contents" aria-busy={isSaving}>
       {/* Header with Stepper */}
       <div className="border-b border-gray-200 p-6 flex-shrink-0">
         <div className="flex items-center justify-between mb-6">
@@ -671,6 +682,9 @@ const StudentAddWizard = ({
       </div>
 
       {/* Footer Navigation */}
+      {(jobError || saveError) && (
+        <p role="alert" className="px-6 py-3 text-sm text-red-600 bg-red-50">{jobError || saveError}</p>
+      )}
       <div className="border-t border-gray-200 p-6 flex justify-between flex-shrink-0" data-tutorial="wizard-navigation">
         <button
           onClick={handleBack}
@@ -692,15 +706,16 @@ const StudentAddWizard = ({
           </button>
         ) : (
           <button
-            onClick={() => onSave(student)}
+            onClick={handleSave}
             className="btn-primary"
             data-tutorial="save-student-btn"
           >
             <Check size={16} />
-            Save Student
+            {isSaving ? "Saving…" : "Save Student"}
           </button>
         )}
       </div>
+      </fieldset>
     </Modal>
   );
 };

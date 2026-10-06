@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   GraduationCap,
@@ -224,15 +224,11 @@ const StudentDirectory = () => {
   const { buildingConfigVersion } = useAppConfig();
   const {
     isTutorialMode,
+    tutorialStudentId,
     setTutorialStudentId,
+    setIsTutorialSaving,
     registerCleanupCallback,
   } = useTutorial();
-  const latestStudentDataRef = useRef(studentData);
-
-  useEffect(() => {
-    latestStudentDataRef.current = studentData;
-  }, [studentData]);
-
   // State management
   const [filterText, setFilterText] = useState("");
   const [sortConfig, setSortConfig] = useState({
@@ -508,6 +504,7 @@ const StudentDirectory = () => {
 
   // Save handlers
   const handleCreateStudent = async (studentFormData) => {
+    if (isTutorialMode) setIsTutorialSaving(true);
     try {
       const payload = prepareStudentPayload(studentFormData, {
         supervisorIndex,
@@ -529,60 +526,32 @@ const StudentDirectory = () => {
         ? { [semesterInfo.semesterKey]: scheduleEntry }
         : {};
 
-      await handleStudentUpdate({
+      const saved = await handleStudentUpdate({
         ...payload,
         isActive: payload.isActive !== undefined ? payload.isActive : true,
         semesterSchedules: nextSchedules,
       });
+      if (!saved?.id) throw new Error("The student worker save could not be confirmed. Please try again.");
 
-      // If in tutorial mode, track the student ID for cleanup
-      if (isTutorialMode && payload.name?.startsWith("[TUTORIAL]")) {
-        // Track the newly created student for cleanup
-        const tutorialIdentifier =
-          payload.email || payload.name || "[TUTORIAL]";
-        setTutorialStudentId(tutorialIdentifier); // Prefer email as unique identifier for cleanup
+      // Tutorial ownership is the created document id, even if the learner
+      // changes the pre-filled name while practicing.
+      if (isTutorialMode) {
+        setTutorialStudentId(saved.id);
 
         // Register cleanup callback to delete the tutorial student
-        registerCleanupCallback(async (tutorialIdentifierValue) => {
-          try {
-            // Find the tutorial student by identifier (email or name)
-            const latestStudents = latestStudentDataRef.current || [];
-            const normalizedIdentifier =
-              typeof tutorialIdentifierValue === "string"
-                ? tutorialIdentifierValue.trim().toLowerCase()
-                : "";
-            const tutorialStudent =
-              (normalizedIdentifier
-                ? latestStudents.find((student) => {
-                    const email = (student.email || "").toLowerCase();
-                    const name = (student.name || "").toLowerCase();
-                    return (
-                      email === normalizedIdentifier ||
-                      name === normalizedIdentifier
-                    );
-                  })
-                : null) ||
-              latestStudents.find((student) =>
-                (student.name || "").toUpperCase().startsWith("[TUTORIAL]")
-              );
-            if (tutorialStudent) {
-              await handleStudentDelete(tutorialStudent);
-              showNotification(
-                "Tutorial complete! Test student has been removed.",
-                "success"
-              );
-            }
-          } catch (error) {
-            console.error("Failed to cleanup tutorial student:", error);
-          }
+        registerCleanupCallback(async (studentId) => {
+          if (!studentId) return;
+          await handleStudentDelete(studentId);
         });
       }
 
       setIsWizardOpen(false);
-      showNotification("Student worker added successfully", "success");
+      return saved;
     } catch (error) {
       console.error("Error creating student:", error);
-      showNotification("Failed to create student. Please try again.", "error");
+      throw error;
+    } finally {
+      if (isTutorialMode) setIsTutorialSaving(false);
     }
   };
 
@@ -614,16 +583,17 @@ const StudentDirectory = () => {
         ? { ...existingSchedules, [semesterInfo.semesterKey]: scheduleEntry }
         : existingSchedules;
 
-      await handleStudentUpdate({
+      const saved = await handleStudentUpdate({
         ...payload,
         semesterSchedules: nextSchedules,
-      });
+      }, { semesterKey: semesterInfo.semesterKey });
+      if (!saved?.id) throw new Error("The student worker save could not be confirmed. Please try again.");
 
       setEditingStudent(null);
-      showNotification("Student worker updated successfully", "success");
+      return saved;
     } catch (error) {
       console.error("Error updating student:", error);
-      showNotification("Failed to update student. Please try again.", "error");
+      throw error;
     }
   };
 
@@ -643,13 +613,9 @@ const StudentDirectory = () => {
       try {
         await handleStudentDelete(studentToDelete.id);
         setStudentToDelete(null);
-        showNotification("Student worker deleted successfully", "success");
       } catch (error) {
         console.error("Error deleting student:", error);
-        showNotification(
-          "Failed to delete student. Please try again.",
-          "error",
-        );
+        showNotification("error", "Delete Failed", error?.message || "Failed to delete student. Please try again.");
       }
     }
   };
@@ -1159,6 +1125,8 @@ const StudentDirectory = () => {
           emptyMessage: "No student workers found.",
         }}
       />
+
+      {isTutorialMode && tutorialStudentId && <span hidden data-tutorial="tutorial-student-saved" />}
 
       {/* Student Add Wizard Modal */}
       {isWizardOpen && (

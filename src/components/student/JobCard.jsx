@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import {
   Building,
   Clock,
@@ -15,6 +15,7 @@ import BuildingSelector from "./BuildingSelector";
 import SuggestionInput from "./SuggestionInput";
 import SupervisorSelect from "./SupervisorSelect";
 import { parseStudentWorkerDate } from "../../utils/studentWorkers";
+import { getStudentJobError } from "../../utils/studentJobDrafts";
 
 /**
  * JobCard - Visual card for displaying and editing job assignments
@@ -59,7 +60,10 @@ const JobCard = ({
   compact = false,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [draft, setDraft] = useState(job || EMPTY_JOB);
+  // During editing, the containing form owns this draft so redraws and tab
+  // changes cannot replace it with a fresh object or discard pending input.
+  const draft = job || EMPTY_JOB;
+  const setDraft = (nextDraft) => onDraftChange?.(nextDraft);
 
   const supervisorLabel = useMemo(() => {
     if (job?.supervisorId) {
@@ -70,20 +74,6 @@ const JobCard = ({
     }
     return job?.supervisor || "";
   }, [job, supervisorOptions]);
-
-  // Notify parent of draft changes so the main Save can auto-commit
-  // an in-progress job edit without requiring an explicit "Save Job" click.
-  useEffect(() => {
-    if (isEditing) {
-      onDraftChange?.(draft);
-    }
-  }, [draft, isEditing]);
-
-  useEffect(() => {
-    if (isEditing) {
-      setDraft(job || EMPTY_JOB);
-    }
-  }, [isEditing, job]);
 
   // Calculate weekly hours
   const weeklyHours = (job?.weeklySchedule || []).reduce((sum, entry) => {
@@ -142,7 +132,11 @@ const JobCard = ({
   // Handle edit mode
   if (isEditing) {
     return (
-      <div className="bg-baylor-green/5 border-2 border-baylor-green/30 rounded-lg p-4" data-tutorial="job-form">
+      <div
+        className="bg-baylor-green/5 border-2 border-baylor-green/30 rounded-lg p-4"
+        data-tutorial="job-form"
+        data-tutorial-ready={!getStudentJobError(draft) && String(draft.hourlyRate ?? "").trim() !== ""}
+      >
         <div className="flex items-center justify-between mb-4">
           <h4 className="font-semibold text-gray-900">Edit Job Assignment</h4>
           {showActions && onCancel && (
@@ -241,7 +235,7 @@ const JobCard = ({
           </div>
 
           {/* Schedule Builder */}
-          <div data-tutorial="schedule-builder">
+          <div data-tutorial="schedule-builder" data-tutorial-ready={(draft.weeklySchedule || []).length > 0}>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Weekly Schedule <span className="text-red-500">*</span>
             </label>

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { render, screen, act, cleanup } from "@testing-library/react";
+import { render, screen, act, cleanup, fireEvent } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const navigateMock = vi.fn();
@@ -63,6 +63,36 @@ describe("TutorialOverlay missing-target recovery", () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    vi.restoreAllMocks();
+    document.body.replaceChildren();
+  });
+
+  it("updates the viewport even when the window was resized before starting a tutorial", () => {
+    let width = 1280;
+    vi.spyOn(window, "innerWidth", "get").mockImplementation(() => width);
+    tutorialState.current = { activeTutorial: null };
+    const view = render(<TutorialOverlay />);
+    width = 320;
+    act(() => window.dispatchEvent(new Event("resize")));
+    setStep(0);
+    view.rerender(<TutorialOverlay />);
+    const card = document.querySelector('[data-tutorial="instruction-card"]');
+    expect(Number.parseFloat(card.style.left)).toBe(16);
+  });
+
+  it("scrolls an oversized form into view once without repeatedly pulling the user away from its inputs", () => {
+    vi.useFakeTimers();
+    const target = document.createElement("div");
+    target.dataset.tutorial = "day-selector";
+    const scroll = vi.fn();
+    target.scrollIntoView = scroll;
+    target.getBoundingClientRect = () => ({ left: 40, right: 280, width: 240, top: -400, bottom: 1100, height: 1500 });
+    document.body.appendChild(target);
+    setStep(1);
+    render(<TutorialOverlay />);
+    act(() => vi.advanceTimersByTime(2500));
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll).toHaveBeenCalledWith(expect.objectContaining({ block: "start" }));
   });
 
   it("intro step (target: null) keeps the intentional full-screen dim + card", () => {
@@ -170,5 +200,77 @@ describe("TutorialOverlay missing-target recovery", () => {
     act(() => vi.advanceTimersByTime(1300));
     expect(screen.queryByText(/Tutorial paused/i)).not.toBeInTheDocument();
     expect(navigateMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("TutorialOverlay action controls and measured layout", () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    document.body.replaceChildren();
+  });
+
+  it("keeps the real Add Job button uncovered by a wrapped 399px instruction card", () => {
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(320);
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(568);
+    const target = document.createElement("button");
+    target.dataset.tutorial = "add-job-btn";
+    target.textContent = "Add Job Assignment";
+    document.body.appendChild(target);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function () {
+      if (this === target) return { x: 40, y: 443, left: 40, top: 443, width: 240, height: 62, right: 280, bottom: 505 };
+      if (this.classList.contains("z-[9999]")) {
+        const top = Number.parseFloat(this.style.top) || 0;
+        const left = Number.parseFloat(this.style.left) || 0;
+        return { x: left, y: top, left, top, width: 288, height: 399, right: left + 288, bottom: top + 399 };
+      }
+      return { x: 0, y: 0, left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 };
+    });
+    setStep(1);
+    const step = { ...TUTORIAL.steps[1], target: '[data-tutorial="add-job-btn"]', action: "Click Add Job", actionType: "click" };
+    tutorialState.current.currentStep = step;
+    render(<TutorialOverlay />);
+    const card = document.querySelector('[class*="9999"]');
+    expect(Number.parseFloat(card.style.top) + 399).toBeLessThanOrEqual(443);
+    expect(Number.parseFloat(card.style.left)).toBeGreaterThanOrEqual(0);
+    expect(Number.parseFloat(card.style.left) + 288).toBeLessThanOrEqual(320);
+    target.remove();
+  });
+
+  it("waits for the successful workflow result instead of completing on any click", async () => {
+    const target = document.createElement("button");
+    target.dataset.tutorial = "save-job-btn";
+    document.body.appendChild(target);
+    setStep(1);
+    tutorialState.current.currentStep = {
+      ...TUTORIAL.steps[1],
+      target: '[data-tutorial="save-job-btn"]',
+      action: "Save a valid job", actionType: "click",
+      completionTarget: '[data-tutorial="jobs-section"][data-tutorial-ready="true"]',
+    };
+    render(<TutorialOverlay />);
+    fireEvent.click(target);
+    expect(tutorialState.current.markActionCompleted).not.toHaveBeenCalled();
+    await act(async () => {
+      const result = document.createElement("div");
+      result.dataset.tutorial = "jobs-section";
+      result.dataset.tutorialReady = "true";
+      document.body.appendChild(result);
+    });
+    expect(tutorialState.current.markActionCompleted).toHaveBeenCalledTimes(1);
+    target.remove();
+    document.querySelector('[data-tutorial="jobs-section"]').remove();
+  });
+
+  it("does not intercept arrow keys and Enter while editing a form input", () => {
+    const target = document.createElement("input");
+    target.dataset.tutorial = "day-selector";
+    document.body.appendChild(target);
+    setStep(1);
+    render(<TutorialOverlay />);
+    fireEvent.keyDown(target, { key: "ArrowRight" });
+    fireEvent.keyDown(target, { key: "Enter" });
+    expect(tutorialState.current.nextStep).not.toHaveBeenCalled();
+    target.remove();
   });
 });

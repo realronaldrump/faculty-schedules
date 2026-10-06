@@ -503,6 +503,7 @@ export const TUTORIALS = {
         position: "bottom",
         action: "Click to select Student Workers tab",
         actionType: "click",
+        completionTarget: '[data-tutorial="add-student-btn"]',
       },
       {
         id: "add-button",
@@ -513,6 +514,7 @@ export const TUTORIALS = {
         position: "bottom",
         action: "Click to open the Add Student wizard",
         actionType: "click",
+        completionTarget: '[data-tutorial="wizard-stepper"]',
       },
       {
         id: "wizard-overview",
@@ -532,7 +534,7 @@ export const TUTORIALS = {
         position: "right",
         action: "Enter the required name and email",
         actionType: "input",
-        validationTarget: '[data-tutorial="basic-info-form"] input[type="text"]',
+        completionTarget: '[data-tutorial="basic-info-form"][data-tutorial-ready="true"]',
       },
       {
         id: "basic-info-next",
@@ -543,6 +545,7 @@ export const TUTORIALS = {
         position: "top",
         action: "Click Next to continue",
         actionType: "click",
+        completionTarget: '[data-tutorial="employment-form"]',
       },
       {
         id: "employment-dates",
@@ -562,6 +565,7 @@ export const TUTORIALS = {
         position: "top",
         action: "Click Next to continue",
         actionType: "click",
+        completionTarget: '[data-tutorial="jobs-section"]',
       },
       {
         id: "jobs-intro",
@@ -581,6 +585,7 @@ export const TUTORIALS = {
         position: "top",
         action: "Click to add a job assignment",
         actionType: "click",
+        completionTarget: '[data-tutorial="job-form"]',
       },
       {
         id: "job-title",
@@ -591,6 +596,7 @@ export const TUTORIALS = {
         position: "left",
         action: "Fill in job title and rate",
         actionType: "input",
+        completionTarget: '[data-tutorial="job-form"][data-tutorial-ready="true"]',
       },
       {
         id: "schedule-builder",
@@ -601,6 +607,7 @@ export const TUTORIALS = {
         position: "top",
         action: "Add at least one work shift",
         actionType: "click",
+        completionTarget: '[data-tutorial="schedule-builder"][data-tutorial-ready="true"]',
       },
       {
         id: "save-job",
@@ -611,6 +618,7 @@ export const TUTORIALS = {
         position: "top",
         action: "Click Save Job",
         actionType: "click",
+        completionTarget: '[data-tutorial="jobs-section"][data-tutorial-ready="true"]',
       },
       {
         id: "jobs-next",
@@ -621,6 +629,7 @@ export const TUTORIALS = {
         position: "top",
         action: "Click Next to continue",
         actionType: "click",
+        completionTarget: '[data-tutorial="review-section"]',
       },
       {
         id: "review-step",
@@ -640,6 +649,7 @@ export const TUTORIALS = {
         position: "top",
         action: "Click Save Student to create the record",
         actionType: "click",
+        completionTarget: '[data-tutorial="tutorial-student-saved"]',
       },
       {
         id: "complete",
@@ -1317,10 +1327,14 @@ export const TutorialProvider = ({ children }) => {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [actionCompleted, setActionCompleted] = useState(false);
+  const [isTutorialSaving, setIsTutorialSaving] = useState(false);
+  const [isTutorialEnding, setIsTutorialEnding] = useState(false);
+  const [tutorialError, setTutorialError] = useState("");
 
   // Tutorial-created data tracking (for cleanup)
   const [tutorialStudentId, setTutorialStudentId] = useState(null);
   const cleanupCallbackRef = useRef(null);
+  const endingTutorialRef = useRef(false);
   const stepWriteTimerRef = useRef(null);
 
   // User preferences
@@ -1391,6 +1405,7 @@ export const TutorialProvider = ({ children }) => {
       const startIndex = Math.min(Math.max(0, startStepIndex), lastIndex);
 
       setActiveTutorial(tutorial);
+      setTutorialError("");
       setCurrentStepIndex(startIndex);
       setIsPaused(false);
       setActionCompleted(false);
@@ -1459,63 +1474,76 @@ export const TutorialProvider = ({ children }) => {
   // End/exit tutorial
   const endTutorial = useCallback(
     async (markComplete = false) => {
-      // Flush any pending debounced step write.
-      if (stepWriteTimerRef.current) {
-        clearTimeout(stepWriteTimerRef.current);
-        stepWriteTimerRef.current = null;
-      }
-
-      const finishedTutorial = activeTutorial;
-
-      // Run cleanup callback if registered (e.g., delete tutorial student)
-      if (cleanupCallbackRef.current) {
-        try {
-          await cleanupCallbackRef.current(tutorialStudentId);
-        } catch (error) {
-          console.error("Tutorial cleanup failed:", error);
-        }
-      }
-
-      if (markComplete && finishedTutorial && actor?.uid) {
-        // Persist completion (source of truth for the progress ring + admin view).
-        try {
-          await markTutorialCompleted(
-            actor,
-            finishedTutorial.id,
-            finishedTutorial.steps.length,
-          );
-        } catch (error) {
-          console.warn("Failed to record tutorial completion:", error);
+      if (isTutorialSaving || endingTutorialRef.current) return;
+      endingTutorialRef.current = true;
+      setIsTutorialEnding(true);
+      setTutorialError("");
+      try {
+        // Flush any pending debounced step write.
+        if (stepWriteTimerRef.current) {
+          clearTimeout(stepWriteTimerRef.current);
+          stepWriteTimerRef.current = null;
         }
 
-        // Emit a semantic activity event so completions surface in the owner's
-        // User Activity console (Top Actions + timeline) for free.
-        try {
-          await logUserActivityEvent({
-            actor,
-            currentPage: (finishedTutorial.targetPage || "help/tutorials").split(
-              "?",
-            )[0],
-            eventType: "action",
-            actionKey: "tutorial_completed",
-            metadata: {
-              tutorialId: finishedTutorial.id,
-              tutorialTitle: finishedTutorial.title,
-            },
-          });
-        } catch (error) {
-          console.warn("Failed to log tutorial completion event:", error);
-        }
-      }
+        const finishedTutorial = activeTutorial;
 
-      setActiveTutorial(null);
-      setCurrentStepIndex(0);
-      setIsPaused(false);
-      setActionCompleted(false);
-      setTutorialStudentId(null);
-      cleanupCallbackRef.current = null;
+        // Run cleanup callback if registered (e.g., delete tutorial student)
+        if (cleanupCallbackRef.current) {
+          try {
+            await cleanupCallbackRef.current(tutorialStudentId);
+          } catch (error) {
+            console.error("Tutorial cleanup failed:", error);
+            if (markComplete) {
+              setTutorialError("The test student could not be removed. Select Finish to retry, or exit the tutorial.");
+              return;
+            }
+          }
+        }
+
+        if (markComplete && finishedTutorial && actor?.uid) {
+          // Persist completion (source of truth for the progress ring + admin view).
+          try {
+            await markTutorialCompleted(
+              actor,
+              finishedTutorial.id,
+              finishedTutorial.steps.length,
+            );
+          } catch (error) {
+            console.warn("Failed to record tutorial completion:", error);
+          }
+
+          // Emit a semantic activity event so completions surface in the owner's
+          // User Activity console (Top Actions + timeline) for free.
+          try {
+            await logUserActivityEvent({
+              actor,
+              currentPage: (finishedTutorial.targetPage || "help/tutorials").split(
+                "?",
+              )[0],
+              eventType: "action",
+              actionKey: "tutorial_completed",
+              metadata: {
+                tutorialId: finishedTutorial.id,
+                tutorialTitle: finishedTutorial.title,
+              },
+            });
+          } catch (error) {
+            console.warn("Failed to log tutorial completion event:", error);
+          }
+        }
+
+        setActiveTutorial(null);
+        setCurrentStepIndex(0);
+        setIsPaused(false);
+        setActionCompleted(false);
+        setTutorialStudentId(null);
+        cleanupCallbackRef.current = null;
+      } finally {
+        endingTutorialRef.current = false;
+        setIsTutorialEnding(false);
+      }
     },
-    [activeTutorial, tutorialStudentId, actor],
+    [activeTutorial, tutorialStudentId, actor, isTutorialSaving],
   );
 
   // Navigate tutorial steps
@@ -1541,6 +1569,7 @@ export const TutorialProvider = ({ children }) => {
   const prevStep = useCallback(() => {
     if (currentStepIndex > 0) {
       setCurrentStepIndex((prev) => prev - 1);
+      setActionCompleted(false);
     }
   }, [currentStepIndex]);
 
@@ -1552,6 +1581,7 @@ export const TutorialProvider = ({ children }) => {
         stepIndex < activeTutorial.steps.length
       ) {
         setCurrentStepIndex(stepIndex);
+        setActionCompleted(false);
       }
     },
     [activeTutorial],
@@ -1638,6 +1668,10 @@ export const TutorialProvider = ({ children }) => {
       isPaused,
       progress,
       actionCompleted,
+      isTutorialSaving,
+      setIsTutorialSaving,
+      isTutorialEnding,
+      tutorialError,
 
       // Tutorial actions
       startTutorial,
@@ -1684,6 +1718,9 @@ export const TutorialProvider = ({ children }) => {
       isPaused,
       progress,
       actionCompleted,
+      isTutorialSaving,
+      isTutorialEnding,
+      tutorialError,
       startTutorial,
       endTutorial,
       nextStep,

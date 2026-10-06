@@ -9,10 +9,11 @@
  * - Responsive positioning
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { X, ChevronLeft, ChevronRight, CheckCircle, CheckCircle2, Target, Hand, AlertTriangle, Loader2 } from 'lucide-react';
 import { useTutorial } from '../../contexts/TutorialContext';
+import { calculateTutorialCardPosition } from '../../utils/tutorialLayout';
 
 // How long a defined target may be missing from the DOM before we treat the
 // user as having navigated away and recover (navigate back + show a notice).
@@ -112,75 +113,6 @@ const ClickBlockerFrame = ({ targetRect, padding = 8 }) => {
   );
 };
 
-// Calculate optimal position for the instruction card
-const calculateCardPosition = (targetRect, cardSize, windowSize) => {
-  if (!targetRect) {
-    // Center the card if no target
-    return {
-      position: 'center',
-      top: (windowSize.height - cardSize.height) / 2,
-      left: (windowSize.width - cardSize.width) / 2
-    };
-  }
-
-  const { top, left, width, height, bottom, right } = targetRect;
-  const padding = 20;
-  const positions = [];
-
-  // Check space below
-  const spaceBelow = windowSize.height - bottom;
-  if (spaceBelow >= cardSize.height + padding) {
-    positions.push({
-      position: 'bottom',
-      top: bottom + padding,
-      left: Math.max(padding, Math.min(left + width / 2 - cardSize.width / 2, windowSize.width - cardSize.width - padding)),
-      score: spaceBelow
-    });
-  }
-
-  // Check space above
-  if (top >= cardSize.height + padding) {
-    positions.push({
-      position: 'top',
-      top: top - cardSize.height - padding,
-      left: Math.max(padding, Math.min(left + width / 2 - cardSize.width / 2, windowSize.width - cardSize.width - padding)),
-      score: top
-    });
-  }
-
-  // Check space to the right
-  const spaceRight = windowSize.width - right;
-  if (spaceRight >= cardSize.width + padding) {
-    positions.push({
-      position: 'right',
-      top: Math.max(padding, Math.min(top + height / 2 - cardSize.height / 2, windowSize.height - cardSize.height - padding)),
-      left: right + padding,
-      score: spaceRight
-    });
-  }
-
-  // Check space to the left
-  if (left >= cardSize.width + padding) {
-    positions.push({
-      position: 'left',
-      top: Math.max(padding, Math.min(top + height / 2 - cardSize.height / 2, windowSize.height - cardSize.height - padding)),
-      left: left - cardSize.width - padding,
-      score: left
-    });
-  }
-
-  // Return position with most space, or default to bottom-center
-  if (positions.length === 0) {
-    return {
-      position: 'bottom',
-      top: Math.min(bottom + padding, windowSize.height - cardSize.height - padding),
-      left: Math.max(padding, (windowSize.width - cardSize.width) / 2)
-    };
-  }
-
-  return positions.sort((a, b) => b.score - a.score)[0];
-};
-
 // Instruction card component
 const InstructionCard = ({
   step,
@@ -194,33 +126,73 @@ const InstructionCard = ({
   isFirst,
   isLast,
   canAdvance,
-  actionCompleted
+  actionCompleted,
+  onMeasure,
+  isBusy = false,
+  error = '',
 }) => {
   const cardRef = useRef(null);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
+
+  useLayoutEffect(() => {
+    setDetailsExpanded(false);
+  }, [step.id]);
+
+  useLayoutEffect(() => {
+    const card = cardRef.current;
+    if (!card) return undefined;
+    const measure = () => {
+      const { width, height } = card.getBoundingClientRect();
+      if (width && height) onMeasure({ width, height });
+    };
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(card);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [onMeasure, step, actionCompleted, position.compact, detailsExpanded]);
 
   return (
     <div
       ref={cardRef}
-      className="fixed z-[9999] w-96 max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-2xl overflow-hidden"
+      data-tutorial="instruction-card"
+      className="fixed z-[9999] w-96 max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col"
       style={{
         top: position.top,
-        left: position.left
+        left: position.left,
+        maxHeight: position.maxHeight,
       }}
     >
       {/* Header */}
-      <div className="bg-baylor-green px-4 py-3 flex items-center justify-between">
+      <div className="bg-baylor-green px-4 py-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2 text-white">
           <Target className="w-5 h-5 text-baylor-gold" />
           <span className="font-semibold">Step {stepNumber} of {totalSteps}</span>
         </div>
+        {position.compact && (
+          <button
+            onClick={() => setDetailsExpanded((expanded) => !expanded)}
+            className="text-xs text-white underline"
+            aria-expanded={detailsExpanded}
+            aria-label={detailsExpanded ? 'Hide instructions' : `Show instructions: ${step.title}`}
+          >
+            {detailsExpanded ? 'Hide' : 'Details'}
+          </button>
+        )}
         <button
           onClick={onClose}
+          disabled={isBusy}
           className="p-1 hover:bg-white/20 rounded transition-colors"
           aria-label="Close tutorial"
         >
           <X className="w-5 h-5 text-white" />
         </button>
       </div>
+
+      {error && <p role="alert" className="p-3 text-sm text-red-700 bg-red-50 shrink-0">{error}</p>}
 
       {/* Progress bar */}
       <div className="h-1 bg-gray-200">
@@ -231,7 +203,7 @@ const InstructionCard = ({
       </div>
 
       {/* Content */}
-      <div className="p-5">
+      {(!position.compact || detailsExpanded) && <div className="p-5 min-h-0 overflow-y-auto">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">{step.title}</h3>
         <p className="text-gray-600 mb-4">{step.content}</p>
 
@@ -271,12 +243,13 @@ const InstructionCard = ({
             />
           ))}
         </div>
-      </div>
+      </div>}
 
       {/* Footer */}
-      <div className="px-5 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+      <div className="px-5 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between shrink-0">
         <button
           onClick={onSkip}
+          disabled={isBusy}
           className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
         >
           Skip tutorial
@@ -285,6 +258,7 @@ const InstructionCard = ({
           {!isFirst && (
             <button
               onClick={onPrev}
+              disabled={isBusy}
               className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -293,7 +267,7 @@ const InstructionCard = ({
           )}
           <button
             onClick={onNext}
-            disabled={!canAdvance}
+            disabled={isBusy || !canAdvance}
             className={`flex items-center gap-1 px-4 py-1.5 text-sm rounded-lg transition-colors ${canAdvance
               ? 'bg-baylor-green text-white hover:bg-baylor-green/90'
               : 'bg-gray-300 text-gray-500 cursor-not-allowed'
@@ -369,7 +343,10 @@ const TutorialOverlay = () => {
     prevStep,
     endTutorial,
     actionCompleted,
-    markActionCompleted
+    markActionCompleted,
+    isTutorialSaving,
+    isTutorialEnding,
+    tutorialError,
   } = useTutorial();
 
   const navigate = useNavigate();
@@ -377,14 +354,30 @@ const TutorialOverlay = () => {
 
   const [targetRect, setTargetRect] = useState(null);
   const [targetElement, setTargetElement] = useState(null);
+  const scrolledTargetRef = useRef(null);
   // True only when the current step DEFINES a target but it isn't in the DOM
   // right now. Distinct from intro/outro steps where `target` is null by design.
   const [targetMissing, setTargetMissing] = useState(false);
   // Becomes true once a missing target has survived the grace period, at which
   // point we surface the recovery notice and navigate back to the tutorial page.
   const [recoveryActive, setRecoveryActive] = useState(false);
-  const [cardPosition, setCardPosition] = useState({ top: 0, left: 0, position: 'center' });
-  const cardSize = { width: 384, height: 300 }; // Approximate card dimensions
+  const [cardSize, setCardSize] = useState({ width: 384, height: 0 });
+  const [windowSize, setWindowSize] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  const cardPosition = calculateTutorialCardPosition(targetRect, cardSize, windowSize);
+  const measureCard = useCallback((size) => {
+    setCardSize((current) => current.width === size.width && current.height === size.height ? current : size);
+  }, []);
+
+  useLayoutEffect(() => {
+    const updateViewport = () => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      setWindowSize((current) => current.width === width && current.height === height ? current : { width, height });
+    };
+    updateViewport();
+    window.addEventListener('resize', updateViewport);
+    return () => window.removeEventListener('resize', updateViewport);
+  }, []);
 
   // Calculate if user can advance to next step
   const canAdvance = !currentStep?.action || actionCompleted;
@@ -422,10 +415,11 @@ const TutorialOverlay = () => {
         rect.left >= 0 &&
         rect.right <= window.innerWidth;
 
-      if (!isInViewport) {
+      if (!isInViewport && scrolledTargetRef.current !== element) {
+        scrolledTargetRef.current = element;
         element.scrollIntoView({
           behavior: 'smooth',
-          block: 'center',
+          block: rect.height > window.innerHeight ? 'start' : 'center',
           inline: 'center'
         });
       }
@@ -439,33 +433,31 @@ const TutorialOverlay = () => {
     }
   }, [currentStep]);
 
-  // Update card position when target changes
-  useEffect(() => {
-    const windowSize = { width: window.innerWidth, height: window.innerHeight };
-    const newPosition = calculateCardPosition(targetRect, cardSize, windowSize);
-    setCardPosition(newPosition);
-  }, [targetRect]);
-
   // Track target element position
   useEffect(() => {
     if (!activeTutorial || isPaused) return;
 
+    scrolledTargetRef.current = null;
     updateTargetPosition();
 
     // Update on scroll and resize
     const handleUpdate = () => {
       requestAnimationFrame(updateTargetPosition);
     };
+    const handleResize = () => {
+      scrolledTargetRef.current = null;
+      handleUpdate();
+    };
 
     window.addEventListener('scroll', handleUpdate, true);
-    window.addEventListener('resize', handleUpdate);
+    window.addEventListener('resize', handleResize);
 
     // Poll for dynamic elements that may not exist immediately
     const pollInterval = setInterval(updateTargetPosition, 500);
 
     return () => {
       window.removeEventListener('scroll', handleUpdate, true);
-      window.removeEventListener('resize', handleUpdate);
+      window.removeEventListener('resize', handleResize);
       clearInterval(pollInterval);
     };
   }, [activeTutorial, currentStep, isPaused, updateTargetPosition]);
@@ -505,7 +497,7 @@ const TutorialOverlay = () => {
 
   // Listen for action completion on target element
   useEffect(() => {
-    if (!currentStep?.action || !targetElement || actionCompleted) return;
+    if (!currentStep?.action || currentStep.completionTarget || !targetElement || actionCompleted || isPaused) return;
 
     const actionType = currentStep.actionType;
 
@@ -532,13 +524,31 @@ const TutorialOverlay = () => {
     }
 
     return;
-  }, [currentStep, targetElement, actionCompleted, markActionCompleted]);
+  }, [currentStep, targetElement, actionCompleted, markActionCompleted, isPaused]);
+
+  // Workflow steps complete when the validated result is present, including
+  // when a successful click unmounts its original target or data was pre-filled.
+  useEffect(() => {
+    if (!currentStep?.action || !currentStep.completionTarget || actionCompleted || isPaused) return undefined;
+    let completed = false;
+    const check = () => {
+      if (!completed && document.querySelector(currentStep.completionTarget)) {
+        completed = true;
+        markActionCompleted();
+      }
+    };
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-tutorial-ready'] });
+    return () => observer.disconnect();
+  }, [currentStep, actionCompleted, markActionCompleted, isPaused]);
 
   // Keyboard navigation
   useEffect(() => {
-    if (!activeTutorial) return;
+    if (!activeTutorial || isPaused || isTutorialSaving || isTutorialEnding) return;
 
     const handleKeyDown = (e) => {
+      if (e.key !== 'Escape' && e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
       switch (e.key) {
         case 'ArrowRight':
         case 'Enter':
@@ -558,7 +568,7 @@ const TutorialOverlay = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTutorial, nextStep, prevStep, endTutorial]);
+  }, [activeTutorial, nextStep, prevStep, endTutorial, isPaused, isTutorialSaving, isTutorialEnding]);
 
   // Don't render if no active tutorial or paused
   if (!activeTutorial || isPaused || !currentStep) {
@@ -584,6 +594,9 @@ const TutorialOverlay = () => {
           isLast={currentStepIndex === activeTutorial.steps.length - 1}
           canAdvance={canAdvance}
           actionCompleted={actionCompleted}
+          onMeasure={measureCard}
+          isBusy={isTutorialSaving || isTutorialEnding}
+          error={tutorialError}
         />
       );
     }
@@ -627,6 +640,9 @@ const TutorialOverlay = () => {
         isLast={currentStepIndex === activeTutorial.steps.length - 1}
         canAdvance={canAdvance}
         actionCompleted={actionCompleted}
+        onMeasure={measureCard}
+        isBusy={isTutorialSaving || isTutorialEnding}
+        error={tutorialError}
       />
     </>
   );

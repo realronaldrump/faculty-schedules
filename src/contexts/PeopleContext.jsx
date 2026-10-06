@@ -40,7 +40,7 @@ export const PeopleProvider = ({ children }) => {
 
   // Fetch all people (Directory Load)
   const loadPeople = useCallback(
-    async ({ force = false } = {}) => {
+    async ({ force = false, throwOnError = false } = {}) => {
       if (loaded && !force) return;
 
       setLoading(true);
@@ -55,6 +55,7 @@ export const PeopleProvider = ({ children }) => {
       } catch (err) {
         console.error("❌ Error loading people:", err);
         setError(err.message);
+        if (throwOnError) throw err;
       } finally {
         setLoading(false);
       }

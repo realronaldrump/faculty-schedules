@@ -5,11 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   rawPeople: [],
   rawPrograms: [],
+  studentPermission: true,
 }));
 
 const mocks = vi.hoisted(() => ({
   doc: vi.fn((...segments) => segments.join("/")),
   updateDoc: vi.fn(),
+  setDoc: vi.fn(),
+  getDoc: vi.fn(),
   loadPrograms: vi.fn(),
   loadPeople: vi.fn(),
   logUpdate: vi.fn(),
@@ -30,10 +33,10 @@ vi.mock("firebase/firestore", () => ({
   collection: vi.fn(),
   deleteField: vi.fn(),
   doc: mocks.doc,
-  getDoc: vi.fn(),
+  getDoc: mocks.getDoc,
   getDocs: vi.fn(),
   query: vi.fn(),
-  setDoc: vi.fn(),
+  setDoc: mocks.setDoc,
   updateDoc: mocks.updateDoc,
   where: vi.fn(),
 }));
@@ -60,8 +63,8 @@ vi.mock("../contexts/DataContext", () => ({
     canDeleteFaculty: true,
     canEditStaff: true,
     canCreateStaff: true,
-    canEditStudent: true,
-    canCreateStudent: true,
+    canEditStudent: () => state.studentPermission,
+    canCreateStudent: () => state.studentPermission,
     canDeleteStudent: true,
     canCreateProgram: true,
   }),
@@ -143,5 +146,67 @@ describe("usePeopleOperations director assignment cleanup", () => {
       "Person Not Found",
       expect.any(String),
     );
+  });
+});
+
+describe("student save outcomes", () => {
+  const student = {
+    id: "student-1", name: "Example Student", email: "example@example.edu",
+    roles: ["student"], jobs: [], semesterSchedules: {},
+  };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    state.studentPermission = true;
+    state.rawPeople = [student];
+    mocks.doc.mockImplementation((...segments) => ({ id: segments.at(-1), path: segments.join("/") }));
+    mocks.updateDoc.mockResolvedValue(undefined);
+    mocks.setDoc.mockResolvedValue(undefined);
+    mocks.loadPeople.mockResolvedValue(undefined);
+    mocks.getDoc.mockResolvedValue({ exists: () => false });
+  });
+  afterEach(() => {
+    cleanup();
+    mocks.doc.mockImplementation((...segments) => segments.join("/"));
+  });
+
+  it("rejects a failed database write instead of allowing an outer success message", async () => {
+    const error = Object.assign(new Error("Missing or insufficient permissions"), { code: "permission-denied" });
+    mocks.updateDoc.mockRejectedValueOnce(error);
+    const { result } = renderHook(() => usePeopleOperations());
+    await expect(result.current.handleStudentUpdate(student)).rejects.toBe(error);
+    expect(mocks.loadPeople).not.toHaveBeenCalled();
+    expect(mocks.showNotification.mock.calls.some(([type]) => type === "success")).toBe(false);
+  });
+
+  it("rejects a denied permission before writing", async () => {
+    state.studentPermission = false;
+    const { result } = renderHook(() => usePeopleOperations());
+    await expect(result.current.handleStudentUpdate(student)).rejects.toMatchObject({ code: "permission-denied" });
+    expect(mocks.updateDoc).not.toHaveBeenCalled();
+  });
+
+  it("returns the saved record identity after the write and refresh", async () => {
+    const { result } = renderHook(() => usePeopleOperations());
+    const saved = await result.current.handleStudentUpdate(student);
+    expect(saved).toMatchObject({ id: student.id });
+    expect(mocks.updateDoc).toHaveBeenCalledTimes(1);
+    expect(mocks.loadPeople).toHaveBeenCalledWith({ force: true, throwOnError: true });
+  });
+
+  it("does not create a duplicate when an edited record no longer exists", async () => {
+    state.rawPeople = [];
+    const { result } = renderHook(() => usePeopleOperations());
+    await expect(result.current.handleStudentUpdate(student)).rejects.toMatchObject({ code: "not-found" });
+    expect(mocks.setDoc).not.toHaveBeenCalled();
+    expect(mocks.updateDoc).not.toHaveBeenCalled();
+  });
+
+  it("does not report an acknowledged write as failed when refreshing the directory fails", async () => {
+    mocks.loadPeople.mockRejectedValueOnce(new Error("Offline during directory refresh"));
+    const { result } = renderHook(() => usePeopleOperations());
+    const saved = await result.current.handleStudentUpdate(student);
+    expect(saved).toMatchObject({ id: student.id, refreshFailed: true });
+    expect(mocks.updateDoc).toHaveBeenCalledTimes(1);
+    expect(mocks.showNotification).toHaveBeenCalledWith("warning", "Student Saved", expect.stringContaining("refresh"));
   });
 });

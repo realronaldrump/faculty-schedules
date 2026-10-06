@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo } from "react";
 import {
   X,
   User,
@@ -17,6 +17,8 @@ import StatusBadge, { getStudentStatus } from "./StatusBadge";
 import Modal from "../shared/Modal";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import { parseStudentWorkerDate } from "../../utils/studentWorkers";
+import useStudentJobEditor from "../../hooks/useStudentJobEditor";
+import useStudentSave from "../../hooks/useStudentSave";
 
 /**
  * StudentEditModal - Full-screen modal for editing student workers
@@ -49,11 +51,16 @@ const StudentEditModal = ({
   const [formData, setFormData] = useState({ ...student });
   const [errors, setErrors] = useState({});
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [editingJobIndex, setEditingJobIndex] = useState(null);
-  // Holds the live draft of any job currently being edited so the main
-  // Save button can auto-commit it without requiring an explicit "Save Job" click.
-  const activeDraftRef = useRef(null);
-  const [addingJob, setAddingJob] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const {
+    editor, jobError, collectJobs, commitJob, startNewJob,
+    startEditingJob, changeDraft, cancelJob, removeJob,
+  } = useStudentJobEditor(
+    formData.jobs || [],
+    (jobs) => setFormData((prev) => ({ ...prev, jobs })),
+    formData,
+  );
+  const { saveStudent, isSaving, saveError } = useStudentSave(onSave);
   const canDeleteStudent =
     typeof window === "undefined" ||
     window?.appPermissions?.canDeleteStudent !== false;
@@ -72,18 +79,18 @@ const StudentEditModal = ({
     });
   };
 
-  const validate = () => {
+  const validate = (candidate) => {
     const newErrors = {};
-    if (!formData.name?.trim()) newErrors.name = "Name is required";
-    if (!formData.email?.trim()) {
+    if (!candidate.name?.trim()) newErrors.name = "Name is required";
+    if (!candidate.email?.trim()) {
       newErrors.email = "Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate.email)) {
       newErrors.email = "Please enter a valid email";
     }
     // Validate date range
-    if (formData.startDate && formData.endDate) {
-      const start = parseStudentWorkerDate(formData.startDate);
-      const end = parseStudentWorkerDate(formData.endDate);
+    if (candidate.startDate && candidate.endDate) {
+      const start = parseStudentWorkerDate(candidate.startDate);
+      const end = parseStudentWorkerDate(candidate.endDate);
       if (start && end && end < start) {
         newErrors.endDate = "End date cannot be before start date";
       }
@@ -93,41 +100,16 @@ const StudentEditModal = ({
   };
 
   const handleSave = () => {
-    // Auto-commit any in-progress job edit so users don't lose changes
-    // made in JobCard without explicitly clicking "Save Job".
-    let dataToSave = formData;
-    if (editingJobIndex !== null && activeDraftRef.current) {
-      const newJobs = [...(formData.jobs || [])];
-      newJobs[editingJobIndex] = { ...newJobs[editingJobIndex], ...activeDraftRef.current };
-      dataToSave = { ...formData, jobs: newJobs };
+    if (isSaving) return;
+    const jobs = collectJobs();
+    if (!jobs) {
+      setActiveTab("jobs");
+      return;
     }
-    if (validate()) {
-      onSave(dataToSave);
+    const dataToSave = { ...formData, jobs };
+    if (validate(dataToSave)) {
+      saveStudent(dataToSave);
     }
-  };
-
-  // Job management
-  const addJob = (job) => {
-    setFormData((prev) => ({
-      ...prev,
-      jobs: [...(prev.jobs || []), { ...job, id: Date.now().toString() }],
-    }));
-    setAddingJob(false);
-  };
-
-  const updateJob = (index, updates) => {
-    setFormData((prev) => {
-      const newJobs = [...(prev.jobs || [])];
-      newJobs[index] = { ...newJobs[index], ...updates };
-      return { ...prev, jobs: newJobs };
-    });
-  };
-
-  const removeJob = (index) => {
-    setFormData((prev) => ({
-      ...prev,
-      jobs: (prev.jobs || []).filter((_, i) => i !== index),
-    }));
   };
 
   // Calculate stats
@@ -250,8 +232,8 @@ const StudentEditModal = ({
           </p>
         </div>
         <button
-          onClick={() => setAddingJob(true)}
-          disabled={addingJob}
+          onClick={startNewJob}
+          disabled={editor?.index === "new"}
           className="flex items-center gap-2 px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 transition-colors disabled:opacity-50"
         >
           <Plus size={18} />
@@ -263,19 +245,12 @@ const StudentEditModal = ({
         {(formData.jobs || []).map((job, idx) => (
           <JobCard
             key={job.id || idx}
-            job={job}
-            isEditing={editingJobIndex === idx}
-            onEdit={() => setEditingJobIndex(idx)}
-            onSave={(updatedJob) => {
-              updateJob(idx, updatedJob);
-              activeDraftRef.current = null;
-              setEditingJobIndex(null);
-            }}
-            onCancel={() => {
-              activeDraftRef.current = null;
-              setEditingJobIndex(null);
-            }}
-            onDraftChange={(draft) => { activeDraftRef.current = draft; }}
+            job={editor?.index === idx ? editor.draft : job}
+            isEditing={editor?.index === idx}
+            onEdit={() => startEditingJob(idx)}
+            onSave={commitJob}
+            onCancel={cancelJob}
+            onDraftChange={changeDraft}
             onRemove={() => removeJob(idx)}
             availableBuildings={availableBuildings}
             supervisorOptions={supervisorOptions}
@@ -283,30 +258,20 @@ const StudentEditModal = ({
           />
         ))}
 
-        {addingJob && (
+        {editor?.index === "new" && (
           <JobCard
-            job={{
-              jobTitle: "",
-              supervisor: "",
-              supervisorId: "",
-              hourlyRate: "",
-              buildings: [],
-              weeklySchedule: [],
-              startDate: formData.startDate,
-              endDate: formData.endDate,
-            }}
+            job={editor.draft}
             isEditing={true}
-            onSave={(newJob) => {
-              addJob(newJob);
-            }}
-            onCancel={() => setAddingJob(false)}
+            onSave={commitJob}
+            onCancel={cancelJob}
+            onDraftChange={changeDraft}
             availableBuildings={availableBuildings}
             supervisorOptions={supervisorOptions}
             existingJobTitles={existingJobTitles}
           />
         )}
 
-        {(formData.jobs || []).length === 0 && !addingJob && (
+        {(formData.jobs || []).length === 0 && !editor && (
           <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
             <Building size={48} className="mx-auto text-gray-400 mb-3" />
             <p className="text-gray-600 font-medium">No job assignments yet</p>
@@ -506,11 +471,14 @@ const StudentEditModal = ({
   return (
     <Modal
       isOpen
-      onClose={onClose}
+      onClose={isSaving ? undefined : onClose}
+      closeOnEsc={!isSaving}
+      closeOnOverlayClick={!isSaving}
       size="xl"
       showClose={false}
       bodyClassName="flex flex-col"
     >
+      <fieldset disabled={isSaving} className="contents" aria-busy={isSaving}>
       {/* Header */}
       <div className="bg-baylor-green text-white px-6 py-4">
           <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
@@ -640,6 +608,9 @@ const StudentEditModal = ({
         </div>
 
         {/* Footer */}
+        {(jobError || saveError || deleteError) && (
+          <p role="alert" className="px-6 py-3 text-sm text-red-600 bg-red-50">{jobError || saveError || deleteError}</p>
+        )}
         <div className="border-t border-gray-200 px-6 py-4 flex justify-between items-center bg-gray-50">
           <button
             onClick={onClose}
@@ -650,11 +621,12 @@ const StudentEditModal = ({
           <div className="flex gap-3">
             <button onClick={handleSave} className="btn-primary">
               <Check size={18} />
-              Save Changes
+              {isSaving ? "Saving…" : "Save Changes"}
             </button>
           </div>
         </div>
 
+      </fieldset>
       {/* Delete Confirmation */}
       <ConfirmDialog
         isOpen={showDeleteConfirm}
@@ -668,10 +640,15 @@ const StudentEditModal = ({
         confirmText="Delete Student"
         variant="danger"
         icon={Trash2}
-        onConfirm={() => {
+        onConfirm={async () => {
           if (!canDeleteStudent) return;
-          onDelete(student.id);
-          onClose();
+          try {
+            await onDelete(student.id);
+            onClose();
+          } catch (error) {
+            setShowDeleteConfirm(false);
+            setDeleteError(error?.message || "The student worker could not be deleted.");
+          }
         }}
         onCancel={() => setShowDeleteConfirm(false)}
       />

@@ -7,7 +7,6 @@ import BaylorIDManager from "../BaylorIDManager";
 const loadPeopleMock = vi.fn();
 const handleBaylorIdUpdateMock = vi.fn();
 const showNotificationMock = vi.fn();
-const canEditMock = vi.fn();
 
 let peopleMock = [];
 
@@ -15,12 +14,6 @@ vi.mock("../../../contexts/PeopleContext", () => ({
   usePeople: () => ({
     people: peopleMock,
     loadPeople: loadPeopleMock,
-  }),
-}));
-
-vi.mock("../../../contexts/AuthContext", () => ({
-  useAuth: () => ({
-    isAdmin: true,
   }),
 }));
 
@@ -33,12 +26,6 @@ vi.mock("../../../hooks", () => ({
 vi.mock("../../../contexts/UIContext", () => ({
   useUI: () => ({
     showNotification: showNotificationMock,
-  }),
-}));
-
-vi.mock("../../../utils/permissions", () => ({
-  usePermissions: () => ({
-    canEdit: canEditMock,
   }),
 }));
 
@@ -69,7 +56,6 @@ describe("BaylorIDManager", () => {
     loadPeopleMock.mockResolvedValue(undefined);
     handleBaylorIdUpdateMock.mockResolvedValue({});
     showNotificationMock.mockClear();
-    canEditMock.mockReturnValue(true);
   });
 
   afterEach(() => {

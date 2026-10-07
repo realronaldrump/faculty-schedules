@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, describe, expect, it, vi } from "vitest";
 import StudentEditModal from "../StudentEditModal";
 import StudentAddWizard from "../StudentAddWizard";
+import { toStudentWorkerDateString } from "../../../utils/studentWorkers";
 
 const student = {
   id: "student-1",
@@ -147,5 +148,31 @@ describe("student job drafts and persistence", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     expect(onSave.mock.calls[0][0].jobs).toEqual([]);
+  });
+
+  it("starts a job added to an existing student today, not on the original hire date", async () => {
+    const onSave = vi.fn().mockResolvedValue({ id: student.id });
+    const hired = { ...student, startDate: "2025-09-02" };
+    render(<StudentEditModal student={hired} onSave={onSave} onClose={vi.fn()} />);
+    openNewJob();
+    enterJob();
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave.mock.calls[0][0].jobs[0].startDate).toBe(toStudentWorkerDateString());
+  });
+
+  it("leaves ended jobs out of the weekly hours and pay totals", () => {
+    const shift = [{ day: "M", start: "09:00", end: "12:00" }];
+    const withJobs = {
+      ...student,
+      jobs: [
+        { jobTitle: "Old Job", hourlyRate: "10", startDate: "2025-09-02", endDate: "2026-05-15", weeklySchedule: shift },
+        { jobTitle: "New Job", hourlyRate: "12", startDate: "2026-09-02", endDate: "", weeklySchedule: shift },
+      ],
+    };
+    render(<StudentEditModal student={withJobs} onSave={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByText("3.0 hrs/week")).toBeInTheDocument();
+    expect(screen.getByText("$36.00/week")).toBeInTheDocument();
+    expect(screen.getByText(/1 ended/)).toBeInTheDocument();
   });
 });

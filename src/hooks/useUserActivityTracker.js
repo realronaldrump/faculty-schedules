@@ -8,7 +8,7 @@ import {
   setActivityContext,
   touchPresence,
 } from "../utils/activityTracking";
-import { getNavigationMeta } from "../utils/navigationMeta";
+import { isOwnerOnlyPageId } from "../utils/owner";
 
 // Keep "Active now" honest for users who read one page for a while. Presence-only
 // write, gated to a visible tab, so it stays cheap on the free tier.
@@ -22,7 +22,7 @@ const useUserActivityTracker = ({
   currentPage,
   isAuthenticated,
 } = {}) => {
-  const { user, userProfile, loading, canAccess } = useAuth();
+  const { user, userProfile, loading, isOwner } = useAuth();
   const sessionIdRef = useRef("");
   const lastEventRef = useRef(defaultLastEvent);
 
@@ -34,17 +34,13 @@ const useUserActivityTracker = ({
     user?.displayName,
     userProfile?.email,
     userProfile?.displayName,
-    userProfile?.roles,
   ]);
   const actorRef = useRef(actor);
   actorRef.current = actor;
 
-  const hasPageAccess = useMemo(() => {
-    if (!currentPage) return false;
-    const pageMeta = getNavigationMeta(currentPage);
-    const accessId = pageMeta?.accessId || pageMeta?.pageId || currentPage;
-    return typeof canAccess !== "function" || canAccess(accessId);
-  }, [canAccess, currentPage]);
+  // Non-owners are redirected away from owner-only pages; don't log those.
+  const hasPageAccess =
+    Boolean(currentPage) && (isOwner || !isOwnerOnlyPageId(currentPage));
 
   useEffect(() => {
     if (!isAuthenticated || loading || !user?.uid) {

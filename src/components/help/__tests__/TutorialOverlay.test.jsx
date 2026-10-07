@@ -150,6 +150,45 @@ describe("TutorialOverlay missing-target recovery", () => {
     expect(navigateMock).not.toHaveBeenCalled();
   });
 
+  it("offers a way back when a resumed step needs a window that is closed", () => {
+    // Mirrors "Resume · Step 10 of 17" in add-student-worker: the Add Job button
+    // only exists inside the Add Student wizard, which a fresh page has closed.
+    const wizardTutorial = {
+      id: "add-student-worker",
+      targetPage: "people/directory?tab=student",
+      steps: [
+        { id: "welcome", title: "Welcome", content: "", target: null, action: null },
+        { id: "add-button", title: "Click Add Student", content: "", target: '[data-tutorial="add-student-btn"]', action: null },
+        { id: "jobs-intro", title: "Job Assignments", content: "", target: '[data-tutorial="jobs-section"]', action: null },
+        { id: "add-job", title: "Add a Job Assignment", content: "", target: '[data-tutorial="add-job-btn"]', action: null },
+      ],
+    };
+    const addStudent = document.createElement("button");
+    addStudent.setAttribute("data-tutorial", "add-student-btn");
+    document.body.appendChild(addStudent);
+    locationValue = { pathname: "/people/directory" };
+    const goToStep = vi.fn();
+    tutorialState.current = {
+      activeTutorial: wizardTutorial,
+      currentStep: wizardTutorial.steps[3],
+      currentStepIndex: 3,
+      isPaused: false,
+      actionCompleted: false,
+      nextStep: vi.fn(),
+      prevStep: vi.fn(),
+      goToStep,
+      endTutorial: vi.fn(),
+      markActionCompleted: vi.fn(),
+    };
+    render(<TutorialOverlay />);
+
+    act(() => vi.advanceTimersByTime(1300));
+
+    expect(screen.getByText("Step 4 of 4")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Back to step 2/i }));
+    expect(goToStep).toHaveBeenCalledWith(1);
+  });
+
   it("renders normally when the target IS present in the DOM", () => {
     const el = document.createElement("div");
     el.setAttribute("data-tutorial", "day-selector");

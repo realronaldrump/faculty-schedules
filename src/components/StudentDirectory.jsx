@@ -31,6 +31,7 @@ import {
   getStudentAssignments,
   getStudentStatusForSemester,
   getStudentBadgeStatusForSemester,
+  isAssignmentActiveDuringSemester,
   parseStudentWorkerDate,
 } from "../utils/studentWorkers";
 import {
@@ -140,7 +141,7 @@ const prepareStudentPayload = (
         jobTitle: trimValue(job.jobTitle || ""),
         supervisor: resolvedJobSupervisor,
         supervisorId: resolvedJobSupervisorId,
-        hourlyRate: trimValue(job.hourlyRate || ""),
+        hourlyRate: trimValue(job.hourlyRate ?? ""),
         location: locations,
         buildings: locations, // Keep both for compatibility
         weeklySchedule: sanitizeWeeklyEntries(job.weeklySchedule),
@@ -598,13 +599,6 @@ const StudentDirectory = () => {
   };
 
   const confirmDelete = (student) => {
-    if (
-      typeof window !== "undefined" &&
-      window?.appPermissions &&
-      window.appPermissions.canDeleteStudent === false
-    ) {
-      return;
-    }
     setStudentToDelete(student);
   };
 
@@ -822,12 +816,17 @@ const StudentDirectory = () => {
       label: "Schedule",
       headerClassName: "w-[25%]",
       render: (student) => {
-        const jobs = student.jobs || [];
         const titles = getStudentJobTitles(student);
-        const totalHours = jobs.reduce(
-          (sum, job) => sum + calculateWeeklyHoursFromSchedule(job.weeklySchedule),
-          0,
-        );
+        // Count only jobs that overlap the selected semester, so a job that
+        // ended before it began doesn't inflate this semester's hours.
+        const totalHours = (student.jobs || [])
+          .filter((job) =>
+            isAssignmentActiveDuringSemester(job, student, selectedSemesterMeta),
+          )
+          .reduce(
+            (sum, job) => sum + calculateWeeklyHoursFromSchedule(job.weeklySchedule),
+            0,
+          );
 
         return (
           <div>
@@ -962,10 +961,6 @@ const StudentDirectory = () => {
               onClick={() => setIsWizardOpen(true)}
               className="btn-primary"
               data-tutorial="add-student-btn"
-              disabled={
-                typeof window !== "undefined" &&
-                window?.appPermissions?.canCreateStudent === false
-              }
             >
               <Plus size={18} />
               Add Student

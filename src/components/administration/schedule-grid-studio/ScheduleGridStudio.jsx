@@ -795,7 +795,6 @@ const ScheduleGridStudio = ({
   catalogSemester = "",
   isLoadingClassCatalog = false,
   isLoadingTemplates = false,
-  canSave = false,
   onBack,
   onSaveTemplate,
   onRefreshTemplates,
@@ -918,7 +917,7 @@ const ScheduleGridStudio = ({
   };
 
   const saveTemplate = async (asCopy = false) => {
-    if (!canSave || !onSaveTemplate) return;
+    if (!onSaveTemplate) return;
     if (!document.name.trim()) {
       setNotice({ type: "error", text: "Give this template a name before saving." });
       setActiveTab("details");
@@ -1094,7 +1093,7 @@ const ScheduleGridStudio = ({
               >
                 <Redo2 className="h-4 w-4" />
               </button>
-              {canSave ? (
+              {onSaveTemplate ? (
                 <>
                   <button
                     type="button"

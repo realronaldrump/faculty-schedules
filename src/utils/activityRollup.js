@@ -141,9 +141,6 @@ const asDate = (value) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
-const normalizeRole = (role) =>
-  typeof role === "string" && role.trim() ? role.trim() : "unknown";
-
 const normalizeEventType = (value, pageId) => {
   if (typeof value === "string" && value.trim()) return value.trim();
   return pageId ? "page_enter" : "action";
@@ -175,7 +172,6 @@ const normalizeEvent = (event) => {
     uid: event.uid,
     email: event.email || "",
     displayName: event.displayName || event.email || event.uid || "Unknown User",
-    role: normalizeRole(event.role),
     sessionId:
       typeof event.sessionId === "string" && event.sessionId.trim()
         ? event.sessionId.trim()
@@ -212,20 +208,6 @@ const createAppHourlyBuckets = () =>
 
 const createUserHourlyBuckets = () =>
   Array.from({ length: 24 }, (_, hour) => createUserHourlyBucket(hour));
-
-const ensureRoleBreakdown = (map, role) => {
-  const normalizedRole = normalizeRole(role);
-  if (!map.has(normalizedRole)) {
-    map.set(normalizedRole, {
-      uniqueUsers: new Set(),
-      sessionIds: new Set(),
-      pageEnterCount: 0,
-      semanticEventCount: 0,
-      totalMinutesApprox: 0,
-    });
-  }
-  return map.get(normalizedRole);
-};
 
 const ensureTopEntry = (map, key, seedFactory) => {
   if (!map.has(key)) {
@@ -318,7 +300,6 @@ const createDailyAccumulator = (dateKey) => ({
   semanticEventCount: 0,
   totalMinutesApprox: 0,
   hourlyBuckets: createAppHourlyBuckets(),
-  roleBreakdown: new Map(),
   topPages: new Map(),
   topSections: new Map(),
   topActions: new Map(),
@@ -338,7 +319,6 @@ const createPageAccumulator = (dateKey, event) => ({
   totalMinutesApprox: 0,
   hourlyBuckets: createAppHourlyBuckets(),
   topActions: new Map(),
-  roleBreakdown: new Map(),
 });
 
 const createUserAccumulator = (dateKey, event) => ({
@@ -346,7 +326,6 @@ const createUserAccumulator = (dateKey, event) => ({
   uid: event.uid,
   email: event.email || "",
   displayName: event.displayName,
-  role: event.role,
   sessionIds: new Set(),
   uniquePages: new Set(),
   pageEnterCount: 0,
@@ -414,18 +393,6 @@ const finalizeHourlyBuckets = (buckets) =>
     }
     return result;
   });
-
-const finalizeRoleBreakdown = (roleBreakdown) =>
-  Array.from(roleBreakdown.entries()).reduce((accumulator, [role, value]) => {
-    accumulator[role] = {
-      uniqueUsers: value.uniqueUsers.size,
-      sessionCount: value.sessionIds.size,
-      pageEnterCount: value.pageEnterCount || 0,
-      semanticEventCount: value.semanticEventCount || 0,
-      totalMinutesApprox: Math.round(value.totalMinutesApprox || 0),
-    };
-    return accumulator;
-  }, {});
 
 const sortByCountThenLabel = (left, right, labelKey) => {
   if ((right.count || 0) !== (left.count || 0)) {
@@ -498,10 +465,6 @@ const rollupActivityForDateKeys = (rawEvents, dateKeys) => {
         userSummary.lastSeenAt = event.timestampDate;
       }
 
-      const roleSummary = ensureRoleBreakdown(daily.roleBreakdown, event.role);
-      roleSummary.uniqueUsers.add(event.uid);
-      roleSummary.sessionIds.add(sessionKey);
-
       const dayBucket = daily.hourlyBuckets[event.hour];
       touchAppBucket(dayBucket, event.uid);
 
@@ -509,12 +472,6 @@ const rollupActivityForDateKeys = (rawEvents, dateKeys) => {
         pageSummary.uniqueUsers.add(event.uid);
         const pageBucket = pageSummary.hourlyBuckets[event.hour];
         touchAppBucket(pageBucket, event.uid);
-        const pageRoleSummary = ensureRoleBreakdown(
-          pageSummary.roleBreakdown,
-          event.role,
-        );
-        pageRoleSummary.uniqueUsers.add(event.uid);
-        pageRoleSummary.sessionIds.add(sessionKey);
       }
 
       if (event.eventType === "page_enter") {
@@ -522,18 +479,12 @@ const rollupActivityForDateKeys = (rawEvents, dateKeys) => {
         dayBucket.pageEnterCount += 1;
         userSummary.pageEnterCount += 1;
         userSummary.hourlyBuckets[event.hour].pageEnterCount += 1;
-        roleSummary.pageEnterCount += 1;
         incrementPageEntry(daily.topPages, event);
         incrementSectionEntry(daily.topSections, event);
 
         if (pageSummary) {
           pageSummary.pageEnterCount += 1;
           pageSummary.hourlyBuckets[event.hour].pageEnterCount += 1;
-          const pageRoleSummary = ensureRoleBreakdown(
-            pageSummary.roleBreakdown,
-            event.role,
-          );
-          pageRoleSummary.pageEnterCount += 1;
         }
 
         const userPageEntry = ensureTopEntry(
@@ -569,7 +520,6 @@ const rollupActivityForDateKeys = (rawEvents, dateKeys) => {
         daily.semanticEventCount += 1;
         dayBucket.semanticEventCount += 1;
         userSummary.hourlyBuckets[event.hour].semanticEventCount += 1;
-        roleSummary.semanticEventCount += 1;
         incrementActionEntry(daily.topActions, event.actionKey, event.uid);
         incrementActionEntry(userSummary.topActions, event.actionKey, event.uid);
 
@@ -577,11 +527,6 @@ const rollupActivityForDateKeys = (rawEvents, dateKeys) => {
           pageSummary.semanticEventCount += 1;
           pageSummary.hourlyBuckets[event.hour].semanticEventCount += 1;
           incrementActionEntry(pageSummary.topActions, event.actionKey, event.uid);
-          const pageRoleSummary = ensureRoleBreakdown(
-            pageSummary.roleBreakdown,
-            event.role,
-          );
-          pageRoleSummary.semanticEventCount += 1;
         }
       }
     });
@@ -597,7 +542,6 @@ const rollupActivityForDateKeys = (rawEvents, dateKeys) => {
       if (!daily) return;
       const userSummary = daily.userSummaries.get(event.uid);
       const pageSummary = daily.pageSummaries.get(event.pageId);
-      const roleSummary = ensureRoleBreakdown(daily.roleBreakdown, event.role);
       const nextTimestamp = nextEvent?.timestampDate;
       const diffMinutes = nextTimestamp
         ? (nextTimestamp.getTime() - event.timestampDate.getTime()) / (1000 * 60)
@@ -606,18 +550,12 @@ const rollupActivityForDateKeys = (rawEvents, dateKeys) => {
 
       daily.totalMinutesApprox += minutes;
       daily.hourlyBuckets[event.hour].totalMinutesApprox += minutes;
-      roleSummary.totalMinutesApprox += minutes;
       addMinutesToPageEntry(daily.topPages, event, minutes);
       addMinutesToSectionEntry(daily.topSections, event, minutes);
 
       if (pageSummary) {
         pageSummary.totalMinutesApprox += minutes;
         pageSummary.hourlyBuckets[event.hour].totalMinutesApprox += minutes;
-        const pageRoleSummary = ensureRoleBreakdown(
-          pageSummary.roleBreakdown,
-          event.role,
-        );
-        pageRoleSummary.totalMinutesApprox += minutes;
       }
 
       if (userSummary) {
@@ -661,7 +599,6 @@ const rollupActivityForDateKeys = (rawEvents, dateKeys) => {
         uid: summary.uid,
         email: summary.email || "",
         displayName: summary.displayName,
-        role: summary.role,
         sessionCount: summary.sessionIds.size,
         totalMinutesApprox: Math.round(summary.totalMinutesApprox),
         pagesVisitedCount: summary.uniquePages.size,
@@ -685,7 +622,6 @@ const rollupActivityForDateKeys = (rawEvents, dateKeys) => {
         totalMinutesApprox: Math.round(summary.totalMinutesApprox),
         hourlyBuckets: finalizeHourlyBuckets(summary.hourlyBuckets),
         topActions: finalizeTopEntries(summary.topActions, "actionKey"),
-        roleBreakdown: finalizeRoleBreakdown(summary.roleBreakdown),
       }));
 
       const avgMinutesPerUser =
@@ -714,7 +650,6 @@ const rollupActivityForDateKeys = (rawEvents, dateKeys) => {
           totalMinutesApprox: Math.round(daily.totalMinutesApprox),
           avgMinutesPerUser,
           avgPagesPerUser,
-          roleBreakdown: finalizeRoleBreakdown(daily.roleBreakdown),
           hourlyBuckets: finalizeHourlyBuckets(daily.hourlyBuckets),
           topPages: finalizeTopEntries(daily.topPages, "pageLabel"),
           topSections: finalizeTopEntries(daily.topSections, "sectionLabel"),

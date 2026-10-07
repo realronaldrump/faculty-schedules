@@ -42,6 +42,39 @@ export const WHATS_NEW_STORAGE_KEY = "whatsNewLastSeenVersion";
 
 export const RELEASES = [
   {
+    version: 13,
+    date: "2026-10-07T16:00:00-06:00",
+    title: "Saving student jobs works again",
+    summary:
+      "Student worker changes save reliably, tutorials can recover when a step goes missing, and every approved account can use every page.",
+    highlights: [
+      {
+        icon: BadgeCheck,
+        title: "Student worker saves are fixed",
+        description:
+          "Ending a job and adding a new one now saves for every student worker. Some older records had a leftover field that blocked every change.",
+      },
+      {
+        icon: GraduationCap,
+        title: "Hours and pay count current jobs only",
+        description:
+          "Ended jobs stay listed but no longer add to weekly hours, pay, or the 20-hour warning, and new jobs start on today's date.",
+      },
+      {
+        icon: BookOpen,
+        title: "Tutorials recover instead of getting stuck",
+        description:
+          "If a tutorial step needs a window that isn't open, a Back to step button returns you to the last step you can continue from.",
+      },
+      {
+        icon: ShieldCheck,
+        title: "No more permission errors",
+        description:
+          "Every approved account can now use every page and action. Archived semesters can still be edited, just like before.",
+      },
+    ],
+  },
+  {
     version: 12,
     date: "2026-08-25T11:13:04-05:00",
     title: "Design room grids your way",

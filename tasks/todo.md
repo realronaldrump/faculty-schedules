@@ -1,57 +1,47 @@
-# Comprehensive Refactor & Cleanup — July 2026
+# Scott's blocked saves + stuck tutorial; remove account-level permissions — Oct 2026
 
-(Previous plan archived at tasks/archive-2026-07-director-canonicalization.md)
+(Previous plan archived at tasks/archive-2026-07-comprehensive-refactor.md)
 
-Goal: leaner, faster, easier-to-understand codebase. Remove dead/legacy code,
-consolidate duplication, and preserve intended behavior while correcting defects
-found by the newly tracked regression suite. No intentional appearance changes.
+Root causes (confirmed against prod data):
+- Student saves: rules `hasNoLegacyDirectorFlag()` rejected any update to a people doc
+  still carrying `isUPD` (16/95 docs, incl. Acascia Mata) — for admins too. 66a9868 only
+  surfaced the error.
+- Tutorial: "Resume · Step 10 of 17" starts at a step whose target only exists inside
+  the (closed) Add Student wizard; the paused card offered only Exit.
 
-Baseline (verified before changes): 296 tests green (47 files), lint clean
-(max-warnings 0), build passes, knip: 24 unused exports + 1 duplicate export.
+## Prod data (one-time script, scratchpad)
+- [x] Read-only scan: 16 isUPD (all false), no legacy program director fields
+- [x] Pre-deploy: strip isUPD, disable 6 staff accounts, set owner status active
+- [ ] Deploy rules + push client
+- [ ] Post-deploy: delete users.roles/permissions, settings/accessControl, terms.locked
 
-## Phase 1 — Baseline & Discovery
-- [x] Run tests/lint/build baseline (all green)
-- [x] knip sweep: 24 unused exports, 1 duplicate export, 1 config hint, 0 unused files/deps
-- [x] Verify July director work is complete (remnants only in intentional migration tooling)
-- [x] Deep-dive analysis: audited every newly tracked test and its production path
+## Code
+- [x] firestore.rules → approval + owner only (drop roles/pages/validators/term locks)
+- [x] AuthContext isApproved; approval screen in main.jsx before providers
+- [x] Delete ProtectedContent, authz, permissions, pageRegistry, AccessControl, functions/
+- [x] Strip permission plumbing (nav, sidebar, dashboard, hubs, ops hooks, components)
+- [x] Owner-only Accounts page
+- [x] Remove semester locking
+- [x] Remove telemetry role dimension
+- [x] Student modal fixes (totals exclude ended jobs, shared hours math, today default, rate 0, message)
+- [x] Directory hours column counts only semester-active jobs
+- [x] Tutorial paused card → "Back to step K"; fix people-directory targetPage
+- [x] RoomReservations userProfile prefill
+- [~] Legacy director migration tooling — kept: it also canonicalizes current
+      `programs.directors` lists in the health scan, not only the retired fields
+- [x] Docs, What's New, lessons, memory
 
-## Phase 2 — Repo hygiene (quick wins)
-- [x] Fix .gitignore hiding 25 utils test files from git (stale `src/utils/__tests__/*` rule); tracked tests + sanitized fixtures (verified Jane-Doe data)
-- [x] Remove tracked `firestore-debug.log`; ignore it
-- [x] Remove empty dirs `api/`, `src/utils/import/legacy/`
-- [x] Move stray `src/utils/buildingDirectoryUtils.test.js` into `__tests__/`
-- [x] knip.json: remove redundant `src/main.jsx` entry pattern (verified knip still resolves entries)
-- [x] package.json: remove placeholder keywords/repository/bugs/homepage metadata
-- [x] Fix broken PWA manifest: move it to `public/`, set start_url to "/", and ship correctly encoded 192px/512px PNG icons (verified in dist/)
-- [x] Remove dead Firebase Storage artifacts and references: `storage.rules`, `cors.json`, config/build/docs, and dead `deploy:hosting` script
-- [x] firestore.rules: add missing `maintenanceReports` rule (historical-baseline apply writes it; write was permission-denied in prod = tool errored at final step)
-- [x] README: Storage removed from stack line; fixed duplicated module-map lines
-- [x] CLAUDE.md: remove dead `docs/agents/*` references (files never existed; empty dir removed); dedupe `.claude/CLAUDE.md` (was full copy of root; now just unique login info)
-
-## Phase 3 — Dead code removal
-- [x] Resolve all 24 knip unused exports (delete or de-export; delete transitively-dead code)
-- [x] Fix useHubTabs duplicate export (named + default)
-- [x] Remove cascade orphans, including the unused normalized schema module
-- [x] Re-run knip until clean
-
-## Phase 4 — Defects exposed by the audit
-- [x] Authorization/directors: canonical deny precedence, merged/adjunct migration safety, dangling-assignment removal, manual-review preservation
-- [x] Imports: overlapping/contradictory identity handling, ambiguous existing matches, modified-record validation, teaching-conflict wiring, accurate reports
-- [x] Legacy cleanup: preserve partial student job and semester-job data before removing mirrors
-- [x] CLSS/data contracts: exact-first header matching, Staff surname parsing, canonical default term codes
-- [x] Scheduling/data edges: weekend comparisons, mixed physical/virtual rooms, ambiguous PAF name fallback, strict worker dates, corrupted seen-state
-- [x] Strengthen misleading regression tests for capacity, director consistency, combined reservation conflicts, and permission mappings
-
-## Phase 5 — Verification
-- [x] Full test suite green (335 tests, 48 files)
-- [x] Lint clean (max-warnings 0)
-- [x] Production build succeeds
-- [x] Knip clean
-- [x] Firestore rules parse successfully in the emulator
-- [x] Final diff/whitespace/debug-marker/orphan sweep clean
+## Verification
+- [x] vitest (468), lint, build; knip unchanged from HEAD (23 pre-existing unused exports)
+- [x] rules emulator tests (incl. Scott regression: approved user updates a doc carrying isUPD)
+- [x] emulator E2E in browser pane: pending screen, owner approve/disable/re-enable,
+      non-owner nav + redirect, Scott's exact edit persists, Resume step 10 → Back to step 3 →
+      complete 17/17 with cleanup, Accounts page at 375px
 
 ## Review
-- Audited staged, unstaged, and untracked work, including all 25 newly tracked utility test files and both sanitized fixtures.
-- Fixed authorization, migration, import identity, validation, reporting, legacy cleanup, scheduling, location, and PWA issues found by the audit.
-- Removed dead Storage/client initialization artifacts, 24 unused exports, one duplicate export, and cascade-dead code; knip is clean.
-- Final verification results are recorded in Phase 5 above.
+- The save bug was data + rules, not permissions: Scott was already `admin`. Stripping
+  `isUPD` in prod unblocked him immediately; the rules rewrite removes the class of bug.
+- Account permissions removed end to end (~2,300 lines deleted). Owner keeps User Activity
+  and gains Accounts (approve/disable sign-ups). Six staff-role accounts disabled per owner.
+- Not done (deliberately): student update still writes the record's `id` field — reads map
+  the Firestore doc id over it, so it is harmless and corrects stale values.

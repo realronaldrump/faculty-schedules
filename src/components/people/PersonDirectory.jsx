@@ -467,14 +467,6 @@ const buildCreateRow = ({ columns, isCreating, renderCreateActions }) => {
   );
 };
 
-const getPermissionValue = (permission, record) => {
-  if (typeof permission === 'function') {
-    return permission(record) !== false;
-  }
-  if (permission === false) return false;
-  return true;
-};
-
 const ConfiguredPersonDirectory = (props) => {
   const { config } = props;
   const { spacesByKey, spacesList, selectedSemester } = useData();
@@ -506,7 +498,6 @@ const ConfiguredPersonDirectory = (props) => {
     getSortValue,
     getSortPriority,
     searchFields = ['name', 'email', 'jobTitle', 'office'],
-    permissions = {},
     enableCreate = false,
     emptyMessage = 'No records found.',
     tableProps,
@@ -771,13 +762,11 @@ const ConfiguredPersonDirectory = (props) => {
 
   const renderActions = useCallback((record, isEditing) => {
     if (isEditing) {
-      const canSave = getPermissionValue(permissions.canEdit, record);
       return (
         <div className="flex gap-2">
           <button
             onClick={handleSave}
             className="p-2 text-green-600 hover:bg-green-100 rounded-full"
-            disabled={!canSave}
           >
             <Save size={16} />
           </button>
@@ -791,35 +780,29 @@ const ConfiguredPersonDirectory = (props) => {
       );
     }
 
-    const canEdit = getPermissionValue(permissions.canEdit, record);
-    const canDelete = getPermissionValue(permissions.canDelete, record);
-
     return (
       <div className="flex gap-1 justify-end">
         <button
           onClick={(event) => { event.stopPropagation(); handleEdit(record); }}
           className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
-          disabled={!canEdit}
         >
           <Edit size={16} />
         </button>
         <button
           onClick={(event) => { event.stopPropagation(); handleDelete(record); }}
           className="p-2 text-red-600 hover:bg-red-100 rounded-full"
-          disabled={!canDelete}
         >
           <Trash2 size={16} />
         </button>
       </div>
     );
-  }, [permissions, handleSave, handleCancel, handleEdit, handleDelete]);
+  }, [handleSave, handleCancel, handleEdit, handleDelete]);
 
   const createActions = useCallback(() => (
     <div className="flex gap-2 justify-end">
       <button
         onClick={handleCreateSave}
         className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
-        disabled={!getPermissionValue(permissions.canCreate)}
       >
         <Save size={16} />
       </button>
@@ -830,7 +813,7 @@ const ConfiguredPersonDirectory = (props) => {
         <X size={16} />
       </button>
     </div>
-  ), [handleCreateSave, handleCancelCreate, permissions.canCreate]);
+  ), [handleCreateSave, handleCancelCreate]);
 
   const createRow = buildCreateRow({
     columns,

@@ -9,11 +9,10 @@
  * Current size: ~600 lines (focused on layout, routing, and navigation)
  */
 
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
 import PageRouter from "./components/app/PageRouter.jsx";
-import Login from "./components/Login";
 import MaintenancePage from "./components/MaintenancePage";
 import Notification from "./components/Notification";
 import SelectDropdown from "./components/SelectDropdown";
@@ -25,7 +24,6 @@ import { useUI } from "./contexts/UIContext.jsx";
 import { useSchedules } from "./contexts/ScheduleContext.jsx";
 import useUserActivityTracker from "./hooks/useUserActivityTracker";
 import { useWhatsNew } from "./hooks";
-import { registerNavigationPages } from "./utils/pageRegistry";
 import { navigationItems } from "./utils/navigationConfig";
 
 import { Calendar, GraduationCap, Menu, LogOut, Sparkles } from "lucide-react";
@@ -41,7 +39,7 @@ const MAINTENANCE_UNTIL = "2025-07-03T08:00:00";
 
 function App() {
   // Context hooks
-  const { user, signOut, isAdmin, loading: authLoading } = useAuth();
+  const { user, signOut } = useAuth();
   const {
     selectedSemester,
     setSelectedSemester,
@@ -50,7 +48,6 @@ function App() {
     includeArchived,
     setIncludeArchived,
     selectedTermMeta,
-    isSelectedTermLocked,
     loading: scheduleLoading,
   } = useSchedules();
 
@@ -114,11 +111,6 @@ function App() {
     }
   };
 
-  // Register navigation pages for access control
-  useEffect(() => {
-    registerNavigationPages(navigationItems);
-  }, []);
-
   useUserActivityTracker({
     currentPage,
     isAuthenticated: Boolean(user),
@@ -170,22 +162,6 @@ function App() {
         until={MAINTENANCE_UNTIL}
       />
     );
-  }
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="loading-shimmer w-16 h-16 rounded-full mx-auto mb-4" />
-          <p className="text-gray-600">Loading account...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Authentication check
-  if (!user) {
-    return <Login />;
   }
 
   return (
@@ -296,16 +272,13 @@ function App() {
                 placeholder="Select Semester"
                 leadingIcon={<Calendar className="h-4 w-4 text-gray-500" />}
                 selectedAdornment={
-                  selectedTermMeta && isSelectedTermLocked ? (
+                  selectedTermMeta?.status === "archived" ? (
                     <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
-                      {selectedTermMeta.status === "archived"
-                        ? "Archived"
-                        : "Locked"}
+                      Archived
                     </span>
                   ) : null
                 }
                 beforeOptions={
-                  isAdmin &&
                   termOptions?.some((term) => term.status === "archived") ? (
                     <div className="app-dropdown-section">
                       <label className="flex items-center space-x-2 text-xs text-gray-600">
@@ -326,16 +299,11 @@ function App() {
                 menuMinWidth={192}
                 renderOption={(option) => {
                   const termMeta = termMetaByLabel.get(option.value);
-                  const isArchived = termMeta?.status === "archived";
-                  const isLocked = termMeta?.locked === true || isArchived;
-
                   return (
                     <span className="flex items-center justify-between gap-3">
                       <span>{option.label}</span>
-                      {(isArchived || isLocked) && (
-                        <span className="text-xs text-amber-700">
-                          {isArchived ? "Archived" : "Locked"}
-                        </span>
+                      {termMeta?.status === "archived" && (
+                        <span className="text-xs text-amber-700">Archived</span>
                       )}
                     </span>
                   );
@@ -378,15 +346,6 @@ function App() {
           </div>
 
         </header>
-
-        {selectedTermMeta && isSelectedTermLocked && (
-          <div className="px-4 md:px-6 py-3 bg-amber-50 border-b border-amber-200 text-sm text-amber-800">
-            <span className="font-medium">{selectedTermMeta.term}</span>{" "}
-            {selectedTermMeta.status === "archived"
-              ? "is archived and read-only. Schedule edits and imports are disabled."
-              : "is locked and read-only. Schedule edits and imports are disabled."}
-          </div>
-        )}
 
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto">

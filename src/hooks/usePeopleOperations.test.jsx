@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   rawPeople: [],
   rawPrograms: [],
-  studentPermission: true,
 }));
 
 const mocks = vi.hoisted(() => ({
@@ -17,7 +16,6 @@ const mocks = vi.hoisted(() => ({
   loadPeople: vi.fn(),
   logUpdate: vi.fn(),
   showNotification: vi.fn(),
-  canEdit: vi.fn(() => true),
 }));
 
 vi.mock("../firebase", () => ({
@@ -57,16 +55,6 @@ vi.mock("../contexts/DataContext", () => ({
     rawPrograms: state.rawPrograms,
     loadPrograms: mocks.loadPrograms,
     spacesByKey: new Map(),
-    canEdit: mocks.canEdit,
-    canEditFaculty: true,
-    canCreateFaculty: true,
-    canDeleteFaculty: true,
-    canEditStaff: true,
-    canCreateStaff: true,
-    canEditStudent: () => state.studentPermission,
-    canCreateStudent: () => state.studentPermission,
-    canDeleteStudent: true,
-    canCreateProgram: true,
   }),
 }));
 
@@ -91,7 +79,6 @@ describe("usePeopleOperations director assignment cleanup", () => {
         directors: [{ personId: "missing-person", role: "upd" }],
       },
     ];
-    mocks.canEdit.mockReturnValue(true);
     mocks.updateDoc.mockResolvedValue(undefined);
     mocks.logUpdate.mockResolvedValue(undefined);
     mocks.loadPrograms.mockResolvedValue(undefined);
@@ -156,7 +143,6 @@ describe("student save outcomes", () => {
   };
   beforeEach(() => {
     vi.clearAllMocks();
-    state.studentPermission = true;
     state.rawPeople = [student];
     mocks.doc.mockImplementation((...segments) => ({ id: segments.at(-1), path: segments.join("/") }));
     mocks.updateDoc.mockResolvedValue(undefined);
@@ -176,13 +162,6 @@ describe("student save outcomes", () => {
     await expect(result.current.handleStudentUpdate(student)).rejects.toBe(error);
     expect(mocks.loadPeople).not.toHaveBeenCalled();
     expect(mocks.showNotification.mock.calls.some(([type]) => type === "success")).toBe(false);
-  });
-
-  it("rejects a denied permission before writing", async () => {
-    state.studentPermission = false;
-    const { result } = renderHook(() => usePeopleOperations());
-    await expect(result.current.handleStudentUpdate(student)).rejects.toMatchObject({ code: "permission-denied" });
-    expect(mocks.updateDoc).not.toHaveBeenCalled();
   });
 
   it("returns the saved record identity after the write and refresh", async () => {

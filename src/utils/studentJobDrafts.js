@@ -29,7 +29,7 @@ export const getStudentJobError = (job) => {
 
 export const getStudentSaveError = (error) => {
   if (error?.code === "permission-denied" || /insufficient permissions/i.test(error?.message || "")) {
-    return "Your account is not permitted to save this student worker. Your changes are still here.";
+    return "The dashboard refused this save because your sign-in has expired or your account was disabled. Sign out and back in, then try again. Your changes are still here.";
   }
   return error?.message || "The student worker could not be saved. Your changes are still here. Please try again.";
 };

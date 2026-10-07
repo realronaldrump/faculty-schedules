@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App.jsx";
 import Login from "./components/Login.jsx";
+import AccountStatusScreen from "./components/AccountStatusScreen.jsx";
 import "./index.css";
 import { AuthProvider, useAuth } from "./contexts/AuthContext.jsx";
 import { AppConfigProvider } from "./contexts/AppConfigContext.jsx";
@@ -68,7 +69,7 @@ const AuthLoadingState = () => (
 );
 
 const AuthenticatedApp = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, isApproved } = useAuth();
 
   if (loading) {
     return <AuthLoadingState />;
@@ -76,6 +77,10 @@ const AuthenticatedApp = () => {
 
   if (!user) {
     return <Login />;
+  }
+
+  if (!isApproved) {
+    return <AccountStatusScreen />;
   }
 
   return (

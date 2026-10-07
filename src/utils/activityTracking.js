@@ -18,23 +18,6 @@ const DURATION_EVENT_TYPE = "duration";
 const MAX_DURATION_MINUTES_PER_WRITE = 2;
 const warnedWriteFailures = new Set();
 
-const normalizeRoleList = (roles) => {
-  if (Array.isArray(roles)) return roles.filter(Boolean);
-  if (roles && typeof roles === "object") {
-    return Object.keys(roles).filter((key) => roles[key]);
-  }
-  if (typeof roles === "string" && roles.trim()) return [roles.trim()];
-  return [];
-};
-
-const getPrimaryRole = (roles) => {
-  const normalizedRoles = normalizeRoleList(roles);
-  if (normalizedRoles.includes("admin")) return "admin";
-  if (normalizedRoles.includes("staff")) return "staff";
-  if (normalizedRoles.includes("faculty")) return "faculty";
-  return normalizedRoles[0] || "unknown";
-};
-
 const getDisplayName = ({ user, userProfile }) =>
   userProfile?.displayName ||
   user?.displayName ||
@@ -48,7 +31,6 @@ export const buildActivityActor = ({ user, userProfile }) => {
     uid: user.uid,
     email: userProfile?.email || user.email || "",
     displayName: getDisplayName({ user, userProfile }),
-    role: getPrimaryRole(userProfile?.roles),
   };
 };
 
@@ -214,7 +196,6 @@ const buildDailySummaryUpdate = ({
       uid: actor.uid,
       email: actor.email,
       displayName: actor.displayName,
-      role: actor.role,
       sessionIds: arrayUnion(sessionId),
       pageEnterCount: increment(pageEnterDelta),
       trackedPageEnterCount: increment(pageEnterDelta),
@@ -293,7 +274,6 @@ const buildPresenceBase = (actor, pageMeta, sessionId) => ({
   uid: actor.uid,
   email: actor.email,
   displayName: actor.displayName,
-  role: actor.role,
   sessionId,
   currentPageId: pageMeta.pageId,
   currentPageLabel: pageMeta.pageLabel,
@@ -412,7 +392,6 @@ export const logUserActivityEvent = async ({
     uid: actor.uid,
     email: actor.email,
     displayName: actor.displayName,
-    role: actor.role,
     sessionId,
     eventType: normalizedEventType,
     actionKey: normalizedActionKey,

@@ -7,8 +7,6 @@
 
 import { getMaxEnrollment } from "./enrollmentUtils";
 
-export const PAF_PAGE_ID = "workflows/paf";
-
 // Static costing defaults for PAF forms
 export const PAF_DEFAULTS = {
   costing: "410.41205.100.1000000.91055.155.0000",

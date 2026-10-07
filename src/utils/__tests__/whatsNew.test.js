@@ -41,14 +41,14 @@ describe("whatsNew releases", () => {
     expect(formatReleaseTimestamp(LATEST_RELEASE.date)).toContain("2026");
   });
 
-  it("announces Schedule Grid Studio", () => {
-    expect(LATEST_RELEASE.version).toBe(12);
-    expect(LATEST_RELEASE.title).toBe("Design room grids your way");
+  it("announces the student worker save fix", () => {
+    expect(LATEST_RELEASE.version).toBe(13);
+    expect(LATEST_RELEASE.title).toBe("Saving student jobs works again");
     expect(LATEST_RELEASE.highlights.map(({ title }) => title)).toEqual([
-      "Schedule Grid Studio",
-      "Reusable in-app templates",
-      "More reliable room calendars",
-      "Complete, safer exports",
+      "Student worker saves are fixed",
+      "Hours and pay count current jobs only",
+      "Tutorials recover instead of getting stuck",
+      "No more permission errors",
     ]);
   });
 });

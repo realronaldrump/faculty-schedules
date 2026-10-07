@@ -42,7 +42,7 @@ const durationFields = (row, source = row) => ({
   visible_minutes: durationKind(row) === "measured_visible_tab" ? numeric(source.totalMinutesApprox) : null,
   estimated_minutes: durationKind(row) === "estimated_from_events" ? numeric(source.totalMinutesApprox) : null,
 });
-const actorFields = (row) => ({ uid: row.uid, display_name: row.displayName || "", email: row.email || "", role: row.role || "unknown" });
+const actorFields = (row) => ({ uid: row.uid, display_name: row.displayName || "", email: row.email || "" });
 const rowKey = (row) => `${row.dateKey}:${row.uid}`;
 
 const scopeDailyRow = (row, feature) => {
@@ -50,7 +50,7 @@ const scopeDailyRow = (row, feature) => {
   const page = (row.topPagesDetailed || []).find((item) => item.pageId === feature);
   if (!page) return null;
   return {
-    id: row.id, uid: row.uid, email: row.email, displayName: row.displayName, role: row.role,
+    id: row.id, uid: row.uid, email: row.email, displayName: row.displayName,
     dateKey: row.dateKey, schemaVersion: row.schemaVersion, monitoringVersion: row.monitoringVersion,
     source: row.source, generatedAt: row.generatedAt, updatedAt: row.updatedAt,
     exportScope: "feature", userDayFirstSeenAt: row.firstSeenAt, userDayLastSeenAt: row.lastSeenAt,
@@ -65,7 +65,7 @@ const scopeDailyRow = (row, feature) => {
 };
 
 const metricColumns = ["page_entries", "semantic_actions", "visible_minutes", "estimated_minutes", "unavailable_duration_rows"];
-const identityColumns = ["uid", "display_name", "email", "role"];
+const identityColumns = ["uid", "display_name", "email"];
 const metrics = (rows) => ({
   page_entries: sum(rows, "pageEnterCount"), semantic_actions: sum(rows, "semanticEventCount"),
   visible_minutes: sum(rows.filter((row) => durationKind(row) === "measured_visible_tab"), "totalMinutesApprox"),

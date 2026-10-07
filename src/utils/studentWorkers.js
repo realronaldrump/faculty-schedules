@@ -140,6 +140,16 @@ const parseDateValue = (value, { endOfDay = false } = {}) => {
 export const parseStudentWorkerDate = (value, { endOfDay = false } = {}) =>
   parseDateValue(value, { endOfDay });
 
+/** Local calendar date as the stored `YYYY-MM-DD` student-worker format. */
+export const toStudentWorkerDateString = (date = new Date()) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
+/** A job has ended once its (inclusive, local) end date is in the past. */
+export const isStudentJobEnded = (job, referenceDate = new Date()) => {
+  const end = parseStudentWorkerDate(job?.endDate, { endOfDay: true });
+  return Boolean(end && referenceDate > end);
+};
+
 const buildDateRange = (startValue, endValue) => {
   const start = parseDateValue(startValue, { endOfDay: false });
   const end = parseDateValue(endValue, { endOfDay: true });

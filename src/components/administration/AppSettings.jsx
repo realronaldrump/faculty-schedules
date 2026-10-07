@@ -1,10 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Settings, Calendar, Building2, DoorOpen, Save, HelpCircle, Archive, Lock, Unlock, RotateCcw, Trash2, GitMerge, ChevronDown, ChevronUp, AlertTriangle, BookOpen, Info, Plus, X } from 'lucide-react';
+import { Settings, Calendar, Building2, DoorOpen, Save, HelpCircle, Archive, RotateCcw, Trash2, GitMerge, ChevronDown, ChevronUp, AlertTriangle, BookOpen, Info, Plus, X } from 'lucide-react';
 import { db, COLLECTIONS } from '../../firebase';
 import { doc, getDoc, setDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { logUpdate, logCreate, logBulkUpdate } from '../../utils/changeLogger';
-import { useAuth } from '../../contexts/AuthContext';
 import { useSchedules } from '../../contexts/ScheduleContext';
 import { useUI } from '../../contexts/UIContext';
 import { useAppConfig } from '../../contexts/AppConfigContext';
@@ -22,10 +20,8 @@ import SpaceManagement from './SpaceManagement';
 
 import SelectDropdown from "../SelectDropdown";
 const AppSettings = () => {
-  const navigate = useNavigate();
   const { availableSemesters = [], termOptions = [], refreshTerms } = useSchedules();
   const { showNotification } = useUI();
-  const { canAccess } = useAuth();
   const { termConfig, saveTermConfig } = useAppConfig();
   const [defaultTerm, setDefaultTerm] = useState('');
   const [selectedTerm, setSelectedTerm] = useState('');
@@ -56,7 +52,6 @@ const AppSettings = () => {
   const [mergeTargetTerm, setMergeTargetTerm] = useState('');
   const [showHelpPanel, setShowHelpPanel] = useState(false);
 
-  const isAdmin = canAccess && canAccess('admin/settings');
 
   // Initialize season mappings from termConfig
   useEffect(() => {
@@ -174,7 +169,7 @@ const AppSettings = () => {
       console.error('Error saving default term:', error);
       let errorMessage = 'Failed to save default semester setting.';
       if (error.code === 'permission-denied') {
-        errorMessage = 'Permission denied. Please ensure you have admin privileges.';
+        errorMessage = 'Save refused. Sign out and back in, then try again.';
       }
       showNotification?.('error', 'Save Failed', errorMessage);
     } finally {
@@ -254,7 +249,6 @@ const AppSettings = () => {
   const handleArchiveTerm = async (term) => {
     await updateTermLifecycle(term, {
       status: 'archived',
-      locked: true,
       archivedAt: new Date().toISOString()
     }, 'archived');
   };
@@ -262,17 +256,8 @@ const AppSettings = () => {
   const handleRestoreTerm = async (term) => {
     await updateTermLifecycle(term, {
       status: 'active',
-      locked: false,
       archivedAt: null
     }, 'restored');
-  };
-
-  const handleToggleTermLock = async (term) => {
-    if (term?.status === 'archived') return;
-    await updateTermLifecycle(term, {
-      status: term.status || 'active',
-      locked: !term.locked
-    }, term.locked ? 'unlocked' : 'locked');
   };
 
   const handleBackfillTerms = () => {
@@ -555,26 +540,6 @@ const AppSettings = () => {
     }
   };
 
-  if (!isAdmin) {
-    return (
-      <div className="space-y-6">
-        <button 
-          onClick={() => navigate('/dashboard')}
-          className="flex items-center text-baylor-green hover:text-baylor-green/80 transition-colors font-medium"
-        >
-          <ArrowLeft size={20} className="mr-2" />
-          Back to Dashboard
-        </button>
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
-          <Settings className="w-12 h-12 text-amber-600 mx-auto mb-3" />
-          <h2 className="text-lg font-semibold text-amber-800 mb-2">Admin Access Required</h2>
-          <p className="text-amber-700">
-            You need administrator privileges to access app settings.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -908,18 +873,6 @@ const AppSettings = () => {
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">Understanding Semester Actions</h3>
                 <div className="grid md:grid-cols-2 gap-4 text-sm">
                   <div className="flex items-start gap-3">
-                    <div className="p-1.5 bg-blue-100 rounded">
-                      <Lock size={14} className="text-blue-600" />
-                    </div>
-                    <div>
-                      <span className="font-medium text-gray-800">Lock</span>
-                      <p className="text-gray-600 text-xs mt-0.5">
-                        Prevents any edits to courses in this semester. Courses are still visible and searchable. 
-                        Use this when a semester is complete but you want to keep it active.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
                     <div className="p-1.5 bg-amber-100 rounded">
                       <Archive size={14} className="text-amber-600" />
                     </div>
@@ -927,7 +880,6 @@ const AppSettings = () => {
                       <span className="font-medium text-gray-800">Archive</span>
                       <p className="text-gray-600 text-xs mt-0.5">
                         Hides this semester from the main semester dropdown. Data is preserved and can be restored anytime.
-                        Archived semesters are automatically locked.
                       </p>
                     </div>
                   </div>
@@ -990,7 +942,6 @@ const AppSettings = () => {
               ) : (
                 termOptions.map((term) => {
                   const isArchived = term.status === 'archived';
-                  const isLocked = term.locked === true || isArchived;
                   const courseCount = termCourseCounts[term.termCode] || termCourseCounts[term.term] || 0;
                   const isExpanded = expandedTermInfo === term.termCode;
                   const isLoading = termActionLoading === term.termCode;
@@ -1045,12 +996,6 @@ const AppSettings = () => {
                                     Archived
                                   </span>
                                 )}
-                                {isLocked && !isArchived && (
-                                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full flex items-center gap-1">
-                                    <Lock size={10} />
-                                    Locked
-                                  </span>
-                                )}
                               </div>
                               <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-x-3 gap-y-1">
                                 <span>
@@ -1092,18 +1037,6 @@ const AppSettings = () => {
                       {isExpanded && (
                         <div className="border-t border-gray-100 p-4 bg-gray-50/50">
                           <div className="flex flex-wrap gap-2">
-                            {/* Lock/Unlock */}
-                            {!isArchived && (
-                              <button
-                                onClick={() => handleToggleTermLock(term)}
-                                disabled={isLoading}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                              >
-                                {isLocked ? <Unlock size={14} /> : <Lock size={14} />}
-                                {isLocked ? 'Unlock Editing' : 'Lock Editing'}
-                              </button>
-                            )}
-                            
                             {/* Archive/Restore */}
                             {isArchived ? (
                               <button

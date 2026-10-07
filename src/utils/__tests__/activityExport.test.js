@@ -13,7 +13,7 @@ const page = {
   hourlyBuckets: [{ hour: 9, pageEnterCount: 3, semanticEventCount: 2, totalMinutesApprox: 10 }],
 };
 const row = {
-  id: "2026-09-30_staff", uid: "staff", displayName: "Staff Person", email: "staff@example.test", role: "staff",
+  id: "2026-09-30_staff", uid: "staff", displayName: "Staff Person", email: "staff@example.test",
   dateKey: "2026-09-30", schemaVersion: 3, monitoringVersion: 1,
   pageEnterCount: 5, trackedPageEnterCount: 5, semanticEventCount: 2,
   totalMinutesApprox: 12, measuredMinutes: 12, sessionCount: 1, sessionIds: ["staff_session"],
@@ -24,7 +24,7 @@ const row = {
   topTransitions: [{ fromPageId: "dashboard", toPageId: page.pageId, count: 3 }],
   failureCounts: { save: { pageId: page.pageId, workflow: "schedule_save", errorCode: "permission-denied", count: 2, lastSeenAt: "2026-09-30T14:02:00Z" } },
 };
-const event = { id: "evt-1", uid: "staff", email: row.email, displayName: row.displayName, role: "staff", sessionId: "staff_session",
+const event = { id: "evt-1", uid: "staff", email: row.email, displayName: row.displayName, sessionId: "staff_session",
   timestamp: "2026-09-30T14:00:00Z", eventType: "page_enter", pageId: page.pageId, previousPageId: "dashboard", metadata: { source: "route-change" } };
 const coverage = { complete: true, stopReason: "exhausted", extraReadBudget: 2000, requestedDocumentLimit: 0,
   documentsFetched: 0, queriesAttempted: 0, emptyQueries: 0 };

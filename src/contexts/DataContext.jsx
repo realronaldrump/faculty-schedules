@@ -37,7 +37,6 @@ import {
 } from "../utils/dataAdapter";
 import { fetchRecentChanges } from "../utils/recentChanges";
 import { buildDirectorIndex } from "../utils/directorAssignments";
-import { usePermissions } from "../utils/permissions";
 import { buildCourseSectionKey, parseCourseCode } from "../utils/courseUtils";
 import { applySemesterSchedule } from "../utils/studentWorkers";
 import { isStudentWorker } from "../utils/peopleUtils";
@@ -109,9 +108,6 @@ export const DataProvider = ({ children }) => {
   const warnedRoomDocIdMismatchRef = useRef(new Set());
   const [editHistoryLoaded, setEditHistoryLoaded] = useState(false);
   const [recentChangesLoaded, setRecentChangesLoaded] = useState(false);
-
-  // Permissions
-  const permissions = usePermissions();
 
   // Combined Loading State
   const loading = peopleLoading || schedulesLoading;
@@ -748,9 +744,6 @@ export const DataProvider = ({ children }) => {
       roomsLoading,
       editHistoryLoaded,
       recentChangesLoaded,
-
-      // Permissions (Passthrough)
-      ...permissions,
     }),
     [
       rawScheduleData,
@@ -790,7 +783,6 @@ export const DataProvider = ({ children }) => {
       roomsLoading,
       editHistoryLoaded,
       recentChangesLoaded,
-      permissions,
     ],
   );
 

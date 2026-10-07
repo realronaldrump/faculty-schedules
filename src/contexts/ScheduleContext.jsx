@@ -111,16 +111,6 @@ export const ScheduleProvider = ({ children }) => {
         getTermByLabel(selectedSemester)
     ), [getTermByLabel, selectedSemester]);
 
-    const isSelectedTermLocked = useMemo(() => {
-        if (!selectedTermMeta) return false;
-        return selectedTermMeta.locked === true || selectedTermMeta.status === 'archived';
-    }, [selectedTermMeta]);
-
-    const isTermLocked = useCallback((label) => {
-        const meta = getTermByLabel(label);
-        return meta ? (meta.locked === true || meta.status === 'archived') : false;
-    }, [getTermByLabel]);
-
     // Ensure selection stays valid when terms change
     useEffect(() => {
         if (availableSemesters.length === 0) return;
@@ -185,8 +175,6 @@ export const ScheduleProvider = ({ children }) => {
         includeArchived,
         setIncludeArchived,
         selectedTermMeta,
-        isSelectedTermLocked,
-        isTermLocked,
         getTermByLabel,
         refreshSchedules: () => loadSchedules(selectedSemester),
         refreshTerms
@@ -199,8 +187,6 @@ export const ScheduleProvider = ({ children }) => {
         termOptions,
         includeArchived,
         selectedTermMeta,
-        isSelectedTermLocked,
-        isTermLocked,
         getTermByLabel,
         loadSchedules,
         refreshTerms

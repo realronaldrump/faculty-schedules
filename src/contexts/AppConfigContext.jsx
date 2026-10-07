@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { collection, doc, getDocs, onSnapshot, setDoc } from 'firebase/firestore';
 import { db, COLLECTIONS } from '../firebase';
-import { useAuth } from './AuthContext';
 import {
   DEFAULT_BUILDING_CONFIG,
   normalizeBuildingConfig,
@@ -26,7 +25,6 @@ const withTimestamps = (payload, existing = {}) => {
 };
 
 export const AppConfigProvider = ({ children }) => {
-  const { isAdmin } = useAuth();
   const [buildingConfig, setBuildingConfigState] = useState(DEFAULT_BUILDING_CONFIG);
   const [termConfig, setTermConfigState] = useState(DEFAULT_TERM_CONFIG);
   const [loading, setLoading] = useState(true);
@@ -39,7 +37,6 @@ export const AppConfigProvider = ({ children }) => {
     const termRef = doc(db, 'settings', 'termConfig');
 
     const seedBuildingsFromRooms = async () => {
-      if (!isAdmin) return;
       try {
         const roomsSnapshot = await getDocs(collection(db, COLLECTIONS.ROOMS));
         const buildingMap = new Map();
@@ -69,7 +66,6 @@ export const AppConfigProvider = ({ children }) => {
     };
 
     const seedDefaults = async (ref, defaults, existing) => {
-      if (!isAdmin) return;
       try {
         await setDoc(ref, withTimestamps(defaults, existing), { merge: true });
       } catch (error) {
@@ -137,7 +133,7 @@ export const AppConfigProvider = ({ children }) => {
       unsubscribeBuildings();
       unsubscribeTerms();
     };
-  }, [isAdmin]);
+  }, []);
 
   const saveBuildingConfig = async (nextConfig) => {
     const normalized = normalizeBuildingConfig(nextConfig);

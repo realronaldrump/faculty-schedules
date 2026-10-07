@@ -21,7 +21,6 @@ vi.mock("../utils/activityTracking", () => ({
     uid: user.uid,
     email: userProfile.email,
     displayName: userProfile.displayName,
-    role: userProfile.roles[0],
   }),
   ...trackingMocks,
 }));
@@ -37,10 +36,9 @@ const buildAuthState = () => ({
   userProfile: {
     email: "owner@example.com",
     displayName: "Owner",
-    roles: ["admin"],
   },
   loading: false,
-  canAccess: vi.fn(() => true),
+  isOwner: true,
 });
 
 describe("useUserActivityTracker", () => {
@@ -74,6 +72,15 @@ describe("useUserActivityTracker", () => {
     });
 
     expect(trackingMocks.logUserActivityEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not log owner-only pages for other accounts", async () => {
+    authState = { ...buildAuthState(), isOwner: false };
+    renderHook(() =>
+      useUserActivityTracker({ currentPage: "admin/accounts", isAuthenticated: true }),
+    );
+    await act(async () => {});
+    expect(trackingMocks.logUserActivityEvent).not.toHaveBeenCalled();
   });
 
   it("records the prior page when the route really changes", async () => {

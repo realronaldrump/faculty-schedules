@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createStudentJobDraft, getStudentJobError } from "../utils/studentJobDrafts";
+import { parseStudentWorkerDate, toStudentWorkerDateString } from "../utils/studentWorkers";
 
 // The containing form owns the draft, including while its JobCard is unmounted
 // by a tab change. JobCard never copies a new prop object over entered values.
@@ -29,11 +30,14 @@ export default function useStudentJobEditor(jobs, setJobs, employment) {
 
   const startNewJob = () => {
     if (!commitJob()) return;
+    // A job added later (e.g. a new semester) starts today, not on the
+    // student's original hire date; a future hire date is kept.
+    const hireDate = parseStudentWorkerDate(employment.startDate);
     setEditor({
       index: "new",
       draft: createStudentJobDraft({
         id: crypto.randomUUID(),
-        startDate: employment.startDate || "",
+        startDate: hireDate && hireDate > new Date() ? employment.startDate : toStudentWorkerDateString(),
         endDate: employment.endDate || "",
       }),
     });

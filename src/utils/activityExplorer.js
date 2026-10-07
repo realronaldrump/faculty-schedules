@@ -1,6 +1,6 @@
 import { formatDateKeyInTimeZone, toDate } from "./activityAnalytics";
 import { addDaysToDateKey, enumerateDateKeys } from "./activityRollup";
-import { isActivityOwnerUid } from "./activityOwner";
+import { isOwnerUid } from "./owner";
 import { getNavigationMeta } from "./navigationMeta";
 
 export const VISIT_GAP_MS = 30 * 60 * 1000;
@@ -58,7 +58,7 @@ export const eventLabel = (event) => {
 };
 
 export const isOwnerActivity = (row, ownerUid) =>
-  Boolean((ownerUid && row.uid === ownerUid) || isActivityOwnerUid(row.uid));
+  Boolean((ownerUid && row.uid === ownerUid) || isOwnerUid(row.uid));
 
 export const getExplorerWindow = (range, previousVisit, now = new Date()) => {
   const endDateKey = formatDateKeyInTimeZone(now);
@@ -169,7 +169,6 @@ export const buildUsageModel = ({
     const user = people.get(row.uid) || {
       ...entity(row.uid, row.displayName || row.email || "Unknown person"),
       email: row.email || "",
-      role: row.role || "",
     };
     const day = dayMap.get(row.dateKey) || {
       dateKey: row.dateKey,

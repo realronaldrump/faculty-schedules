@@ -36,4 +36,3 @@ temperature_examples/
 
 # Project-specific local files
 docs/student-worker-audit.md
-functions/package-lock.json

@@ -23,7 +23,6 @@ import { logCreate, logUpdate, logDelete } from "../utils/changeLogger";
 import { useData } from "../contexts/DataContext";
 import { useSchedules } from "../contexts/ScheduleContext";
 import { useUI } from "../contexts/UIContext";
-import { useAuth } from "../contexts/AuthContext";
 import { normalizeTermLabel, termCodeFromLabel } from "../utils/termUtils";
 import {
   parseMultiRoom,
@@ -43,14 +42,10 @@ const useScheduleOperations = () => {
     allPeople,
     peopleIndex,
     spacesByKey,
-    canCreateSchedule,
-    canEditSchedule,
-    canDeleteSchedule,
   } = useData();
-  const { refreshSchedules, selectedSemester, isTermLocked } = useSchedules();
+  const { refreshSchedules, selectedSemester } = useSchedules();
 
   const { showNotification } = useUI();
-  const { isAdmin } = useAuth();
 
   const resolvedPeopleIndex = useMemo(
     () => peopleIndex || buildPeopleIndex(allPeople || rawPeople),
@@ -64,21 +59,6 @@ const useScheduleOperations = () => {
   // Handle schedule update/create
   const handleDataUpdate = useCallback(
     async (updatedRow) => {
-      const isNewSchedule = updatedRow.id && updatedRow.id.startsWith("new_");
-      const hasPermission = isNewSchedule
-        ? canCreateSchedule?.() || false
-        : canEditSchedule?.() || false;
-
-      if (!hasPermission) {
-        const actionName = isNewSchedule ? "create" : "modify";
-        showNotification(
-          "warning",
-          "Permission Denied",
-          `You don't have permission to ${actionName} schedules.`,
-        );
-        return;
-      }
-
       console.log("💾 Updating schedule data:", updatedRow);
 
       try {
@@ -302,14 +282,6 @@ const useScheduleOperations = () => {
             selectedSemester ||
             "",
         );
-        if (normalizedTerm && isTermLocked?.(normalizedTerm) && !isAdmin) {
-          showNotification(
-            "warning",
-            "Semester Locked",
-            `Schedules for ${normalizedTerm} are archived or locked. Editing is disabled.`,
-          );
-          return;
-        }
         const resolvedTermCode = termCodeFromLabel(
           updatedRow.termCode || referenceSchedule?.termCode || normalizedTerm,
         );
@@ -665,29 +637,16 @@ const useScheduleOperations = () => {
       rawPeople,
       spacesByKey,
       refreshSchedules,
-      canCreateSchedule,
-      canEditSchedule,
       showNotification,
       resolvedPeopleIndex,
       peopleMap,
       selectedSemester,
-      isTermLocked,
-      isAdmin,
     ],
   );
 
   // Handle schedule delete
   const handleScheduleDelete = useCallback(
     async (scheduleId) => {
-      if (!canDeleteSchedule?.()) {
-        showNotification(
-          "warning",
-          "Permission Denied",
-          "You don't have permission to delete schedules.",
-        );
-        return;
-      }
-
       console.log("🗑️ Deleting schedule:", scheduleId);
 
       try {
@@ -698,18 +657,6 @@ const useScheduleOperations = () => {
           showNotification("error", "Delete Failed", "Schedule not found.");
           return;
         }
-        const normalizedTerm = normalizeTermLabel(
-          scheduleToDelete.term || selectedSemester || "",
-        );
-        if (normalizedTerm && isTermLocked?.(normalizedTerm) && !isAdmin) {
-          showNotification(
-            "warning",
-            "Semester Locked",
-            `Schedules for ${normalizedTerm} are archived or locked. Deletion is disabled.`,
-          );
-          return;
-        }
-
         await deleteDoc(doc(db, "schedules", scheduleId));
 
         await logDelete(
@@ -739,11 +686,7 @@ const useScheduleOperations = () => {
     [
       rawScheduleData,
       refreshSchedules,
-      canDeleteSchedule,
       showNotification,
-      selectedSemester,
-      isTermLocked,
-      isAdmin,
     ],
   );
 

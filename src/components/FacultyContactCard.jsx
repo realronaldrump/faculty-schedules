@@ -6,7 +6,6 @@ import { usePeopleOperations } from '../hooks';
 import StudentWorkerScheduleView from './analytics/StudentWorkerScheduleView';
 import Modal from './shared/Modal';
 import { useAppConfig } from '../contexts/AppConfigContext';
-import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import {
     DIRECTOR_ROLES,
@@ -195,7 +194,6 @@ const FacultyContactCard = ({
 }) => {
     const contactPerson = person;
     const { handleBaylorIdUpdate } = usePeopleOperations();
-    const { isAdmin } = useAuth();
     const { termConfig, termConfigVersion } = useAppConfig();
     const { directorIndex } = useData();
     // Canonical program-director assignments (programs/{id}.directors)
@@ -678,14 +676,12 @@ const FacultyContactCard = ({
                                             Copy
                                         </button>
                                     )}
-                                    {isAdmin && (
-                                        <button
-                                            onClick={() => setIsEditingBaylorId(true)}
-                                            className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-100 text-gray-700"
-                                        >
-                                            {baylorIdValue ? 'Edit' : 'Add'}
-                                        </button>
-                                    )}
+                                    <button
+                                        onClick={() => setIsEditingBaylorId(true)}
+                                        className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-100 text-gray-700"
+                                    >
+                                        {baylorIdValue ? 'Edit' : 'Add'}
+                                    </button>
                                 </div>
                             )}
                             {baylorIdError && (

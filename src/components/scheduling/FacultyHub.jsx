@@ -9,19 +9,16 @@ const TAB_DEFINITIONS = [
   {
     id: "compare",
     label: "Compare Schedules",
-    accessId: "scheduling/faculty",
     component: FacultySchedules,
   },
   {
     id: "availability",
     label: "Availability",
-    accessId: "scheduling/faculty",
     component: IndividualAvailability,
   },
   {
     id: "meetings",
     label: "Group Meetings",
-    accessId: "scheduling/faculty",
     component: GroupMeetings,
   },
 ];
@@ -29,14 +26,14 @@ const TAB_DEFINITIONS = [
 const CANONICAL_PATH = "/scheduling/faculty";
 
 const FacultyHub = ({ initialTab }) => {
-  const { availableTabs, activeTab, handleTabChange } = useHubTabs({
+  const { activeTab, handleTabChange } = useHubTabs({
     tabs: TAB_DEFINITIONS,
     initialTab,
     strategy: "query",
     canonicalPath: CANONICAL_PATH,
   });
 
-  const activeTabConfig = availableTabs.find((tab) => tab.id === activeTab);
+  const activeTabConfig = TAB_DEFINITIONS.find((tab) => tab.id === activeTab);
   const ActiveComponent = activeTabConfig?.component;
 
   return (
@@ -48,19 +45,13 @@ const FacultyHub = ({ initialTab }) => {
       />
 
       <HubTabs
-        tabs={availableTabs}
+        tabs={TAB_DEFINITIONS}
         activeTab={activeTab}
         onChange={handleTabChange}
         dataTutorialPrefix="faculty-tab-"
       />
 
-      {ActiveComponent ? (
-        <ActiveComponent embedded />
-      ) : (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 text-sm text-gray-600">
-          You do not have access to any faculty scheduling views.
-        </div>
-      )}
+      <ActiveComponent embedded />
     </div>
   );
 };

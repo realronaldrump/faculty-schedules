@@ -224,8 +224,9 @@ not just what changed — so edits are attributed to the person who made them.
 
 ### Other Administration items
 - **CRN Quality Tools** — unchanged in function; updated to the "Semester" wording.
-- **Access Control** and **App Settings** — still here; access control got a
-  behind-the-scenes security and reliability tightening (see note below).
+- **App Settings** — still here. (*October 2026 update:* Access Control was
+  retired. Every approved account can now use every page; the developer
+  approves new sign-ups.)
 - **User Activity** — this analytics console exists but is **visible only to the
   app owner (the developer).** As administrators, you won't see this page, and you
   don't need to — it's listed here only so it's not a surprise if it comes up.

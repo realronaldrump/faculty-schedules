@@ -16,7 +16,12 @@ import TimelineVisualization from "./TimelineVisualization";
 import StatusBadge, { getStudentStatus } from "./StatusBadge";
 import Modal from "../shared/Modal";
 import ConfirmDialog from "../shared/ConfirmDialog";
-import { parseStudentWorkerDate } from "../../utils/studentWorkers";
+import {
+  calculateWeeklyHoursFromSchedule,
+  isStudentJobEnded,
+  parseHourlyRate,
+  parseStudentWorkerDate,
+} from "../../utils/studentWorkers";
 import useStudentJobEditor from "../../hooks/useStudentJobEditor";
 import useStudentSave from "../../hooks/useStudentSave";
 
@@ -61,9 +66,6 @@ const StudentEditModal = ({
     formData,
   );
   const { saveStudent, isSaving, saveError } = useStudentSave(onSave);
-  const canDeleteStudent =
-    typeof window === "undefined" ||
-    window?.appPermissions?.canDeleteStudent !== false;
 
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -112,27 +114,25 @@ const StudentEditModal = ({
     }
   };
 
-  // Calculate stats
+  // Payroll covers current jobs only; ended jobs stay listed but don't count.
   const stats = useMemo(() => {
-    const jobs = formData.jobs || [];
-    let totalHours = 0;
-    let weeklyPay = 0;
-
-    jobs.forEach((job) => {
-      const jobHours = (job.weeklySchedule || []).reduce((sum, entry) => {
-        const start =
-          parseInt(entry.start.split(":")[0]) +
-          parseInt(entry.start.split(":")[1] || 0) / 60;
-        const end =
-          parseInt(entry.end.split(":")[0]) +
-          parseInt(entry.end.split(":")[1] || 0) / 60;
-        return sum + (end - start);
-      }, 0);
-      totalHours += jobHours;
-      weeklyPay += jobHours * (parseFloat(job.hourlyRate) || 0);
+    const jobRows = (formData.jobs || []).map((job) => {
+      const hours = calculateWeeklyHoursFromSchedule(job.weeklySchedule);
+      return {
+        job,
+        hours,
+        pay: hours * parseHourlyRate(job.hourlyRate),
+        ended: isStudentJobEnded(job),
+      };
     });
-
-    return { totalHours, weeklyPay, jobCount: jobs.length };
+    const current = jobRows.filter((row) => !row.ended);
+    return {
+      jobRows,
+      totalHours: current.reduce((sum, row) => sum + row.hours, 0),
+      weeklyPay: current.reduce((sum, row) => sum + row.pay, 0),
+      jobCount: current.length,
+      endedCount: jobRows.length - current.length,
+    };
   }, [formData.jobs]);
 
   const currentStatus = getStudentStatus(formData);
@@ -399,7 +399,7 @@ const StudentEditModal = ({
         </div>
         <div className="bg-baylor-green/10 rounded-lg p-4 text-center">
           <p className="text-3xl font-bold text-baylor-green">
-            ${(stats.weeklyPay * 4).toFixed(2)}
+            ${((stats.weeklyPay * 52) / 12).toFixed(2)}
           </p>
           <p className="text-sm text-gray-600">Monthly Estimate</p>
         </div>
@@ -418,25 +418,12 @@ const StudentEditModal = ({
               </tr>
             </thead>
             <tbody>
-              {(formData.jobs || []).map((job, idx) => {
-                const hours = (job.weeklySchedule || []).reduce(
-                  (sum, entry) => {
-                    const start =
-                      parseInt(entry.start.split(":")[0]) +
-                      parseInt(entry.start.split(":")[1] || 0) / 60;
-                    const end =
-                      parseInt(entry.end.split(":")[0]) +
-                      parseInt(entry.end.split(":")[1] || 0) / 60;
-                    return sum + (end - start);
-                  },
-                  0,
-                );
-                const pay = hours * (parseFloat(job.hourlyRate) || 0);
-
+              {stats.jobRows.map(({ job, hours, pay, ended }, idx) => {
                 return (
-                  <tr key={idx}>
+                  <tr key={idx} className={ended ? "text-gray-400" : undefined}>
                     <td className="table-cell font-medium">
                       {job.jobTitle || "Untitled Job"}
+                      {ended && " (ended)"}
                     </td>
                     <td className="table-cell">
                       ${job.hourlyRate || "0.00"}/hr
@@ -497,20 +484,9 @@ const StudentEditModal = ({
             </div>
             <div className="flex items-center gap-2 justify-end">
               <button
-                onClick={() => {
-                  if (canDeleteStudent) setShowDeleteConfirm(true);
-                }}
-                disabled={!canDeleteStudent}
-                className={`p-2 rounded-full transition-colors ${
-                  canDeleteStudent
-                    ? "text-white/80 hover:text-white hover:bg-white/20"
-                    : "text-white/40 cursor-not-allowed"
-                }`}
-                title={
-                  canDeleteStudent
-                    ? "Delete Student"
-                    : "You do not have permission to delete students"
-                }
+                onClick={() => setShowDeleteConfirm(true)}
+                className="p-2 rounded-full transition-colors text-white/80 hover:text-white hover:bg-white/20"
+                title="Delete Student"
               >
                 <Trash2 size={20} />
               </button>
@@ -543,6 +519,11 @@ const StudentEditModal = ({
               <Building size={16} className="text-baylor-green" />
               <span className="font-medium">
                 {stats.jobCount} job{stats.jobCount !== 1 ? "s" : ""}
+                {stats.endedCount > 0 && (
+                  <span className="font-normal text-gray-500">
+                    {" "}· {stats.endedCount} ended
+                  </span>
+                )}
               </span>
             </div>
             <div className="ml-auto">
@@ -641,7 +622,6 @@ const StudentEditModal = ({
         variant="danger"
         icon={Trash2}
         onConfirm={async () => {
-          if (!canDeleteStudent) return;
           try {
             await onDelete(student.id);
             onClose();

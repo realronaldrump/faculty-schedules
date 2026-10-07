@@ -1,12 +1,11 @@
 import { useState, useMemo, useEffect } from "react";
-import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, Settings, Wifi, Save, Edit2, Trash2, FolderOpen, Play } from "lucide-react";
+import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, GraduationCap, Settings, Wifi, Save, Edit2, Trash2, FolderOpen, Play } from "lucide-react";
 import MultiSelectDropdown from "../MultiSelectDropdown";
 import FacultyContactCard from "../FacultyContactCard";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import Modal from "../shared/Modal";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
-import { useAuth } from "../../contexts/AuthContext";
 import useEmailListPresets from "../../hooks/useEmailListPresets";
 import { useTutorial } from "../../contexts/TutorialContext";
 import { HelpTooltip } from "../help/Tooltip";
@@ -42,7 +41,6 @@ const EmailLists = ({ embedded = false }) => {
     loadPrograms,
   } = useData();
   const { loadPeople } = usePeople();
-  const { isAdmin } = useAuth();
   const {
     presets,
     loading: presetsLoading,
@@ -806,10 +804,6 @@ const EmailLists = ({ embedded = false }) => {
   };
 
   const handleDeletePreset = (preset) => {
-    if (!isAdmin) {
-      showNotification("Only administrators can delete presets", "error");
-      return;
-    }
     setDeletePresetConfirm({ isOpen: true, preset });
   };
 
@@ -969,19 +963,15 @@ const EmailLists = ({ embedded = false }) => {
               Faculty & Staff
             </button>
             <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center px-4 py-2 border rounded-lg transition-colors ${
-                showFilters
-                  ? "bg-baylor-green text-white border-baylor-green"
-                  : "border-gray-300 text-gray-700 hover:bg-gray-50"
-              }`}
-              data-tutorial="advanced-filters-btn"
+              onClick={() => setActiveTab("student-workers")}
+              className={`${
+                activeTab === "student-workers"
+                  ? "border-baylor-green text-baylor-green"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
             >
-              <Settings className="w-4 h-4 mr-2" />
-              Filters
-              <ChevronDown
-                className={`w-4 h-4 ml-2 transition-transform ${showFilters ? "rotate-180" : ""}`}
-              />
+              <GraduationCap className="w-4 h-4" />
+              Student Workers
             </button>
           </nav>
         </div>
@@ -1620,108 +1610,19 @@ const EmailLists = ({ embedded = false }) => {
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
-                      {isAdmin && (
-                        <button
-                          onClick={() => handleDeletePreset(preset)}
-                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-                          title="Delete preset (admin only)"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleDeletePreset(preset)}
+                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                        title="Delete preset"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
-
-          {/* Preset Modal */}
-          <Modal
-            isOpen={showPresetModal}
-            onClose={() => {
-              setShowPresetModal(false);
-              setPresetName("");
-              setEditingPreset(null);
-            }}
-            size="sm"
-            title={editingPreset ? "Edit Preset" : "Create New Preset"}
-            bodyClassName="modal-body space-y-4"
-            footer={
-              <>
-                <button
-                  onClick={() => {
-                    setShowPresetModal(false);
-                    setPresetName("");
-                    setEditingPreset(null);
-                  }}
-                  className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSavePreset}
-                  disabled={
-                    !presetName.trim() ||
-                    selectedPeople.length === 0 ||
-                    presetSaving
-                  }
-                  className="px-4 py-2 text-sm bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                >
-                  {presetSaving ? (
-                    <>
-                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4" />
-                      {editingPreset ? "Update Preset" : "Save Preset"}
-                    </>
-                  )}
-                </button>
-              </>
-            }
-          >
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Preset Name
-              </label>
-              <input
-                type="text"
-                value={presetName}
-                onChange={(e) => setPresetName(e.target.value)}
-                placeholder="e.g., Faculty Meeting Professors, Remote Adjuncts, etc."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                autoFocus
-              />
-            </div>
-            <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-sm text-gray-600">
-                <span className="font-medium">{selectedPeople.length}</span>{" "}
-                people will be saved in this preset
-              </p>
-              {selectedPeople.length > 0 && (
-                <div className="mt-2 max-h-32 overflow-y-auto">
-                  <ul className="text-xs text-gray-500 space-y-0.5">
-                    {combinedDirectoryData
-                      .filter((p) => selectedPeople.includes(p.id))
-                      .slice(0, 10)
-                      .map((p) => (
-                        <li key={p.id} className="truncate">
-                          • {p.name}
-                        </li>
-                      ))}
-                    {selectedPeople.length > 10 && (
-                      <li className="text-gray-400 italic">
-                        ...and {selectedPeople.length - 10} more
-                      </li>
-                    )}
-                  </ul>
-                </div>
-              )}
-            </div>
-          </Modal>
         </>
       )}
 

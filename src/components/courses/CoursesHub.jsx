@@ -9,26 +9,24 @@ const TAB_DEFINITIONS = [
     id: "browse",
     label: "Browse",
     path: "courses/browse",
-    accessId: "courses/browse",
     component: CourseBrowser,
   },
   {
     id: "manage",
     label: "Manage",
     path: "courses/manage",
-    accessId: "courses/manage",
     component: CourseManagement,
   },
 ];
 
 const CoursesHub = ({ initialTab }) => {
-  const { availableTabs, activeTab, handleTabChange } = useHubTabs({
+  const { activeTab, handleTabChange } = useHubTabs({
     tabs: TAB_DEFINITIONS,
     initialTab,
     strategy: "path",
   });
 
-  const activeTabConfig = availableTabs.find((tab) => tab.id === activeTab);
+  const activeTabConfig = TAB_DEFINITIONS.find((tab) => tab.id === activeTab);
   const ActiveComponent = activeTabConfig?.component;
 
   return (
@@ -40,18 +38,12 @@ const CoursesHub = ({ initialTab }) => {
       />
 
       <HubTabs
-        tabs={availableTabs}
+        tabs={TAB_DEFINITIONS}
         activeTab={activeTab}
         onChange={handleTabChange}
       />
 
-      {ActiveComponent ? (
-        <ActiveComponent embedded />
-      ) : (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 text-sm text-gray-600">
-          You do not have access to any course views.
-        </div>
-      )}
+      <ActiveComponent embedded />
     </div>
   );
 };

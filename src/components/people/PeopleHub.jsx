@@ -12,7 +12,6 @@ const TAB_DEFINITIONS = [
     id: "directory",
     label: "Directory",
     path: "people/directory",
-    accessId: "people/directory",
     preserveQuery: true,
     component: PeopleDirectory,
   },
@@ -20,40 +19,36 @@ const TAB_DEFINITIONS = [
     id: "email-lists",
     label: "Email Lists",
     path: "people/email-lists",
-    accessId: "people/email-lists",
     component: EmailLists,
   },
   {
     id: "offices",
     label: "Offices",
     path: "people/offices",
-    accessId: "people/offices",
     component: BuildingDirectory,
   },
   {
     id: "programs",
     label: "Programs & Directors",
     path: "people/programs",
-    accessId: "people/programs",
     component: ProgramManagement,
   },
   {
     id: "baylor-ids",
     label: "Baylor IDs",
     path: "people/baylor-ids",
-    accessId: "people/baylor-ids",
     component: BaylorIDManager,
   },
 ];
 
 const PeopleHub = ({ initialTab }) => {
-  const { availableTabs, activeTab, handleTabChange } = useHubTabs({
+  const { activeTab, handleTabChange } = useHubTabs({
     tabs: TAB_DEFINITIONS,
     initialTab,
     strategy: "path",
   });
 
-  const activeTabConfig = availableTabs.find((tab) => tab.id === activeTab);
+  const activeTabConfig = TAB_DEFINITIONS.find((tab) => tab.id === activeTab);
   const ActiveComponent = activeTabConfig?.component;
 
   return (
@@ -65,18 +60,12 @@ const PeopleHub = ({ initialTab }) => {
       />
 
       <HubTabs
-        tabs={availableTabs}
+        tabs={TAB_DEFINITIONS}
         activeTab={activeTab}
         onChange={handleTabChange}
       />
 
-      {ActiveComponent ? (
-        <ActiveComponent embedded />
-      ) : (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 text-sm text-gray-600">
-          You do not have access to any people views.
-        </div>
-      )}
+      <ActiveComponent embedded />
     </div>
   );
 };

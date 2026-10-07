@@ -1,5 +1,4 @@
 import { Component, Suspense, lazy } from "react";
-import ProtectedContent from "../ProtectedContent.jsx";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { trackFailure } from "../../utils/activityTracking";
 
@@ -51,7 +50,7 @@ const OutlookRoomExport = lazy(() => import("../tools/OutlookRoomExport.jsx"));
 const RoomGridGenerator = lazy(
   () => import("../administration/RoomGridGenerator.jsx"),
 );
-const AccessControl = lazy(() => import("../administration/AccessControl.jsx"));
+const AccountsPage = lazy(() => import("../administration/AccountsPage.jsx"));
 const TutorialPage = lazy(() => import("../help/TutorialPage.jsx"));
 
 const RouteLoadingState = () => (
@@ -120,18 +119,16 @@ const getRouteBoundaryKey = (pageId, componentProps) => {
   return `${pageId}${initialTab}`;
 };
 
-const renderProtectedPage = (pageId, PageComponent, componentProps = {}) => (
+const renderPage = (pageId, PageComponent, componentProps = {}) => (
   <RouteErrorBoundary pageId={pageId} resetKey={getRouteBoundaryKey(pageId, componentProps)}>
-    <ProtectedContent pageId={pageId}>
-      <Suspense fallback={<RouteLoadingState />}>
-        <PageComponent {...componentProps} />
-      </Suspense>
-    </ProtectedContent>
+    <Suspense fallback={<RouteLoadingState />}>
+      <PageComponent {...componentProps} />
+    </Suspense>
   </RouteErrorBoundary>
 );
 
 const PageRouter = ({ currentPage, loading }) => {
-  const { isActivityOwner } = useAuth();
+  const { isOwner } = useAuth();
 
   if (loading) {
     return (
@@ -146,22 +143,22 @@ const PageRouter = ({ currentPage, loading }) => {
 
   switch (currentPage) {
     case "dashboard":
-      return renderProtectedPage("dashboard", Dashboard);
+      return renderPage("dashboard", Dashboard);
     case "live-view":
-      return renderProtectedPage("live-view", LiveView);
+      return renderPage("live-view", LiveView);
     case "scheduling/faculty":
-      return renderProtectedPage("scheduling/faculty", FacultyHub);
+      return renderPage("scheduling/faculty", FacultyHub);
     case "scheduling/rooms":
-      return renderProtectedPage("scheduling/rooms", RoomsHub);
+      return renderPage("scheduling/rooms", RoomsHub);
     case "tools/outlook-export":
-      return renderProtectedPage("tools/outlook-export", OutlookRoomExport);
+      return renderPage("tools/outlook-export", OutlookRoomExport);
     case "tools/room-grid-generator":
-      return renderProtectedPage(
+      return renderPage(
         "tools/room-grid-generator",
         RoomGridGenerator,
       );
     case "scheduling/student-workers":
-      return renderProtectedPage(
+      return renderPage(
         "scheduling/student-workers",
         StudentWorkersHub,
       );
@@ -170,74 +167,72 @@ const PageRouter = ({ currentPage, loading }) => {
     case "people/offices":
     case "people/programs":
     case "people/baylor-ids":
-      return renderProtectedPage(currentPage, PeopleHub);
+      return renderPage(currentPage, PeopleHub);
     case "workflows/paf":
-      return renderProtectedPage("workflows/paf", PAFWorkflow);
+      return renderPage("workflows/paf", PAFWorkflow);
     case "courses/browse":
     case "courses/manage":
-      return renderProtectedPage(currentPage, CoursesHub);
+      return renderPage(currentPage, CoursesHub);
     case "analytics/department-insights":
-      return renderProtectedPage(
+      return renderPage(
         "analytics/department-insights",
         DepartmentInsights,
       );
     case "analytics/student-worker-analytics":
-      return renderProtectedPage(
+      return renderPage(
         "analytics/student-worker-analytics",
         StudentWorkerAnalytics,
       );
     case "analytics/enrollment-capacity":
-      return renderProtectedPage(
+      return renderPage(
         "analytics/enrollment-capacity",
         EnrollmentCapacity,
       );
     case "analytics/term-comparison":
-      return renderProtectedPage("analytics/term-comparison", TermComparison);
+      return renderPage("analytics/term-comparison", TermComparison);
     case "admin-tools/import-wizard":
-      return renderProtectedPage("admin-tools/import-wizard", ImportWizard);
+      return renderPage("admin-tools/import-wizard", ImportWizard);
     case "admin-tools/crn-tools":
-      return renderProtectedPage("admin-tools/crn-tools", CRNQualityTools);
+      return renderPage("admin-tools/crn-tools", CRNQualityTools);
     case "help/tutorials":
-      return renderProtectedPage("help/tutorials", TutorialPage);
+      return renderPage("help/tutorials", TutorialPage);
     case "help/baylor-systems":
-      return renderProtectedPage("help/baylor-systems", BaylorSystems);
+      return renderPage("help/baylor-systems", BaylorSystems);
     case "help/acronyms":
-      return renderProtectedPage("help/acronyms", BaylorAcronyms);
-    case "admin/access-control":
-      return renderProtectedPage("admin/access-control", AccessControl);
+      return renderPage("help/acronyms", BaylorAcronyms);
     case "admin/settings":
-      return renderProtectedPage("admin/settings", AppSettings);
+      return renderPage("admin/settings", AppSettings);
     case "admin/recent-changes":
-      return renderProtectedPage("admin/recent-changes", RecentChangesPage);
+      return renderPage("admin/recent-changes", RecentChangesPage);
     case "admin/user-activity":
-      return (
-        isActivityOwner ? (
-          renderProtectedPage("admin/user-activity", UserActivityPage)
-        ) : (
-          renderProtectedPage("dashboard", Dashboard)
-        )
-      );
+      return isOwner
+        ? renderPage("admin/user-activity", UserActivityPage)
+        : renderPage("dashboard", Dashboard);
+    case "admin/accounts":
+      return isOwner
+        ? renderPage("admin/accounts", AccountsPage)
+        : renderPage("dashboard", Dashboard);
     case "admin/data-hygiene":
-      return renderProtectedPage(
+      return renderPage(
         "admin/data-hygiene",
         DataCleanupRepairsPage,
       );
     case "admin/data-exports":
-      return renderProtectedPage("admin/data-exports", AdminDataExportsPage);
+      return renderPage("admin/data-exports", AdminDataExportsPage);
     case "facilities/spaces":
-      return renderProtectedPage("facilities/spaces", FacilitiesHub, {
+      return renderPage("facilities/spaces", FacilitiesHub, {
         initialTab: "spaces",
       });
     case "facilities/buildings":
-      return renderProtectedPage("facilities/buildings", FacilitiesHub, {
+      return renderPage("facilities/buildings", FacilitiesHub, {
         initialTab: "buildings",
       });
     case "facilities/temperature":
-      return renderProtectedPage("facilities/temperature", FacilitiesHub, {
+      return renderPage("facilities/temperature", FacilitiesHub, {
         initialTab: "temperature",
       });
     default:
-      return renderProtectedPage("dashboard", Dashboard);
+      return renderPage("dashboard", Dashboard);
   }
 };
 

@@ -60,10 +60,13 @@ If any command fails, fix before deploy.
   - One unified page now covers routine data checks, safe fixes, and rare repair tools.
   - “Fix safe issues” runs full canonicalization (legacy cleanup + standardization + linking + location repair).
 
-### C) Access/permission behavior
+### C) Access/approval behavior
 
-- Permission factory: `src/utils/permissions.js`
-- Access UI: `src/components/administration/AccessControl.jsx`
+- Every approved account (`users/{uid}.status == "active"`) can use the whole app; there are no roles or page permissions.
+- The owner UID (`src/utils/owner.js`, duplicated in `firestore.rules`) additionally sees User Activity and Accounts.
+- Approval gate: `src/main.jsx` + `src/components/AccountStatusScreen.jsx`
+- Owner Accounts page (approve/disable sign-ups): `src/components/administration/AccountsPage.jsx`
+- Rules: `firestore.rules` only checks approval/ownership; data validation lives in the app's write paths.
 
 ### D) Temperature monitoring issues
 
@@ -93,7 +96,7 @@ npm run deploy:indexes
 - CLSS diagnostics panel shows no missing required fields for known-good CLSS sample.
 - Data health scan runs and safe fix action succeeds.
 - Data Cleanup & Repairs page loads and Rare repair tools stay locked until explicitly unlocked.
-- Access Control page loads.
+- Accounts page loads for the owner and is hidden for everyone else.
 - Facilities > Temperature loads and tab switching works.
 
 ## 7) CLSS Format Change Runbook (Quick)

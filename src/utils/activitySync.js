@@ -413,7 +413,6 @@ const normalizeUserDailyRow = (row) => {
 
   return {
     ...row,
-    role: row.role || "unknown",
     sessionCount,
     pageEnterCount: numberOrZero(row[pageEnterField]),
     semanticEventCount:
@@ -447,24 +446,6 @@ const normalizeUserDailyRow = (row) => {
   };
 };
 
-const addRoleBreakdown = (target, row, uniqueUsers = 1) => {
-  const role = row.role || "unknown";
-  const existing = target[role] || {
-    role,
-    uniqueUsers: 0,
-    sessionCount: 0,
-    pageEnterCount: 0,
-    semanticEventCount: 0,
-    totalMinutesApprox: 0,
-  };
-  existing.uniqueUsers += uniqueUsers;
-  existing.sessionCount += numberOrZero(row.sessionCount);
-  existing.pageEnterCount += numberOrZero(row.pageEnterCount);
-  existing.semanticEventCount += numberOrZero(row.semanticEventCount);
-  existing.totalMinutesApprox += numberOrZero(row.totalMinutesApprox);
-  target[role] = existing;
-};
-
 const deriveSummariesFromUserDailyRows = (rawUserRows) => {
   const userDailyRows = rawUserRows.map(normalizeUserDailyRow);
   const appByDate = new Map();
@@ -482,7 +463,6 @@ const deriveSummariesFromUserDailyRows = (rawUserRows) => {
       totalMinutesApprox: 0,
       topActions: [],
       topTransitions: [],
-      roleBreakdown: {},
       hourlyBuckets: emptyHourlyBuckets(),
     };
     appRow.uniqueUsers += row.uid ? 1 : 0;
@@ -493,7 +473,6 @@ const deriveSummariesFromUserDailyRows = (rawUserRows) => {
     appRow.topActions.push(...row.topActions);
     appRow.topTransitions.push(...row.topTransitions);
     mergeHourlyBucketsInto(appRow.hourlyBuckets, row.hourlyBuckets);
-    addRoleBreakdown(appRow.roleBreakdown, row, row.uid ? 1 : 0);
     appByDate.set(row.dateKey, appRow);
 
     row.topPagesDetailed.forEach((page) => {
@@ -508,7 +487,6 @@ const deriveSummariesFromUserDailyRows = (rawUserRows) => {
         semanticEventCount: 0,
         totalMinutesApprox: 0,
         topActions: [],
-        roleBreakdown: {},
         hourlyBuckets: emptyHourlyBuckets(),
       };
       pageRow.uniqueUsers += 1;
@@ -517,16 +495,6 @@ const deriveSummariesFromUserDailyRows = (rawUserRows) => {
       pageRow.totalMinutesApprox += numberOrZero(page.totalMinutesApprox);
       pageRow.topActions.push(...(page.topActions || []));
       mergeHourlyBucketsInto(pageRow.hourlyBuckets, page.hourlyBuckets);
-      addRoleBreakdown(
-        pageRow.roleBreakdown,
-        {
-          ...row,
-          pageEnterCount: page.pageEnterCount || page.count,
-          semanticEventCount: page.semanticEventCount,
-          totalMinutesApprox: page.totalMinutesApprox,
-        },
-        1,
-      );
       pageByDateAndId.set(key, pageRow);
     });
   });

@@ -24,7 +24,6 @@ const TAB_DEFINITIONS = [
     icon: DoorOpen,
     path: "facilities/spaces",
     description: "Manage rooms, offices, labs, and other spaces",
-    accessId: "facilities/spaces",
     component: SpaceManagement,
   },
   {
@@ -33,7 +32,6 @@ const TAB_DEFINITIONS = [
     icon: Building2,
     path: "facilities/buildings",
     description: "Configure buildings and aliases",
-    accessId: "facilities/buildings",
     component: BuildingManagement,
   },
   {
@@ -42,19 +40,18 @@ const TAB_DEFINITIONS = [
     icon: Thermometer,
     path: "facilities/temperature",
     description: "Monitor room temperatures and manage sensors",
-    accessId: "facilities/temperature",
     component: TemperatureMonitoring,
   },
 ];
 
 const FacilitiesHub = ({ initialTab }) => {
-  const { availableTabs, activeTab, handleTabChange } = useHubTabs({
+  const { activeTab, handleTabChange } = useHubTabs({
     tabs: TAB_DEFINITIONS,
     initialTab,
     strategy: "path",
   });
 
-  const activeTabConfig = availableTabs.find((tab) => tab.id === activeTab);
+  const activeTabConfig = TAB_DEFINITIONS.find((tab) => tab.id === activeTab);
   const ActiveComponent = activeTabConfig?.component;
 
   return (
@@ -66,7 +63,7 @@ const FacilitiesHub = ({ initialTab }) => {
       />
 
       <HubTabs
-        tabs={availableTabs}
+        tabs={TAB_DEFINITIONS}
         activeTab={activeTab}
         onChange={handleTabChange}
       />
@@ -78,14 +75,7 @@ const FacilitiesHub = ({ initialTab }) => {
       )}
 
       <div className="min-h-[400px]">
-        {ActiveComponent ? (
-          <ActiveComponent />
-        ) : (
-          <div className="text-center py-12 text-gray-500">
-            <Building2 size={48} className="mx-auto mb-4 opacity-50" />
-            <p>Select a tab to get started.</p>
-          </div>
-        )}
+        <ActiveComponent />
       </div>
     </div>
   );

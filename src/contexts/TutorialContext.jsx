@@ -276,7 +276,7 @@ export const TUTORIALS = {
       "Learn how to browse, search, and manage faculty, staff, and student workers in the directory.",
     estimatedTime: "3 min",
     category: "People Management",
-    targetPage: "people/directory?tab=directory",
+    targetPage: "people/directory",
     steps: [
       {
         id: "welcome",
@@ -1318,7 +1318,6 @@ export const TutorialProvider = ({ children }) => {
       user?.displayName,
       userProfile?.email,
       userProfile?.displayName,
-      userProfile?.roles,
     ],
   );
 

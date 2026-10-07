@@ -19,13 +19,10 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { logCreate, logUpdate, logDelete } from "../../utils/changeLogger";
-import { usePermissions } from "../../utils/permissions";
 import { useUI } from "../../contexts/UIContext";
 
 const BaylorAcronyms = () => {
   const { showNotification } = useUI();
-  const { canEdit } = usePermissions();
-  const canEditHere = canEdit("help/acronyms");
   const [acronyms, setAcronyms] = useState([]);
   const [categories, setCategories] = useState([]);
   const [newAcronym, setNewAcronym] = useState({
@@ -88,15 +85,6 @@ const BaylorAcronyms = () => {
   };
 
   const handleAddAcronym = async () => {
-    if (!canEditHere) {
-      showNotification(
-        "warning",
-        "Permission Denied",
-        "You do not have permission to create acronyms.",
-      );
-      return;
-    }
-
     if (!newAcronym.acronym || !newAcronym.standsFor || !newAcronym.category) {
       showNotification(
         "error",
@@ -181,15 +169,6 @@ const BaylorAcronyms = () => {
   };
 
   const handleUpdateAcronym = async (id) => {
-    if (!canEditHere) {
-      showNotification(
-        "warning",
-        "Permission Denied",
-        "You do not have permission to edit acronyms.",
-      );
-      return;
-    }
-
     const isDuplicate = acronyms.some(
       (acronym) =>
         acronym.id !== id &&
@@ -254,15 +233,6 @@ const BaylorAcronyms = () => {
   };
 
   const handleDeleteAcronym = async (id) => {
-    if (!canEditHere) {
-      showNotification(
-        "warning",
-        "Permission Denied",
-        "You do not have permission to delete acronyms.",
-      );
-      return;
-    }
-
     setIsSubmitting(true);
     try {
       const acronymToDelete = acronyms.find((acro) => acro.id === id);

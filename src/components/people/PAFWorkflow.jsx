@@ -18,11 +18,9 @@ import { doc, updateDoc } from "firebase/firestore";
 import { usePeople } from "../../contexts/PeopleContext";
 import { useData } from "../../contexts/DataContext";
 import { useUI } from "../../contexts/UIContext";
-import { usePermissions } from "../../utils/permissions";
 import { db, COLLECTIONS } from "../../firebase";
 import { logUpdate } from "../../utils/changeLogger";
 import {
-  PAF_PAGE_ID,
   PAF_DEFAULTS,
   buildIgnitePersonNumberUpdate,
   buildPAFCoursesByInstructorId,
@@ -39,8 +37,6 @@ const PAFWorkflow = ({ embedded = false }) => {
   const { people: directoryData, loadPeople } = usePeople();
   const { scheduleData, selectedSemester } = useData();
   const { showNotification } = useUI();
-  const { canEdit } = usePermissions();
-  const canEditPAF = canEdit(PAF_PAGE_ID);
 
   const [searchText, setSearchText] = useState("");
   const [expandedIds, setExpandedIds] = useState(new Set());
@@ -166,14 +162,6 @@ const PAFWorkflow = ({ embedded = false }) => {
     }
     if (!adjunct?.id) {
       setIgniteIdError("Cannot save: missing person id");
-      return;
-    }
-    if (!canEditPAF) {
-      showNotification?.(
-        "warning",
-        "Permission Denied",
-        "You do not have permission to update PAF data."
-      );
       return;
     }
 
@@ -473,15 +461,13 @@ const PAFWorkflow = ({ embedded = false }) => {
                                     Not set
                                   </span>
                                 )}
-                                {canEditPAF && (
-                                  <button
-                                    onClick={() => startEditIgniteId(adjunct)}
-                                    className="p-1 text-gray-400 hover:text-baylor-green rounded"
-                                    title="Edit Ignite #"
-                                  >
-                                    <Edit size={14} />
-                                  </button>
-                                )}
+                                <button
+                                  onClick={() => startEditIgniteId(adjunct)}
+                                  className="p-1 text-gray-400 hover:text-baylor-green rounded"
+                                  title="Edit Ignite #"
+                                >
+                                  <Edit size={14} />
+                                </button>
                               </>
                             )}
                           </div>

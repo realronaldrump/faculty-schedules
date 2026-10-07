@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { usePermissions } from "../../utils/permissions";
-import { useAuth } from "../../contexts/AuthContext";
 import {
   Upload,
   CheckCircle,
@@ -25,7 +23,7 @@ import PageHeader from "../shared/PageHeader";
 import { useSchedules } from "../../contexts/ScheduleContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import { useUI } from "../../contexts/UIContext";
-import { normalizeTermLabel, termCodeFromLabel } from "../../utils/termUtils";
+import { termCodeFromLabel } from "../../utils/termUtils";
 import { hashString, hashRecord } from "../../utils/hashUtils";
 import { trackAction, trackFailure } from "../../utils/activityTracking";
 
@@ -71,14 +69,9 @@ const readDirectoryPreviewValue = (row, candidates) => {
 
 const ImportWizard = ({ embedded = false }) => {
   const location = useLocation();
-  const { selectedSemester, refreshSchedules, refreshTerms, isTermLocked } =
-    useSchedules();
-  const { isAdmin } = useAuth();
+  const { selectedSemester, refreshSchedules, refreshTerms } = useSchedules();
   const { loadPeople } = usePeople();
   const { showNotification } = useUI();
-  const { canImport, canEdit } = usePermissions();
-  const canImportHere = canImport("admin-tools/import-wizard");
-  const canEditHere = canEdit("admin-tools/import-wizard");
   const [step, setStep] = useState(1);
   const [fileName, setFileName] = useState("");
   const [fileHash, setFileHash] = useState("");
@@ -370,7 +363,6 @@ const ImportWizard = ({ embedded = false }) => {
           semester || "",
           {
             persist: true,
-            includeOfficeRooms: canEditHere,
             importMetadata,
           },
         );
@@ -396,30 +388,6 @@ const ImportWizard = ({ embedded = false }) => {
     selectedFieldMap = null,
     matchResolutions = null,
   ) => {
-    if (!canImportHere) {
-      showNotification?.(
-        "warning",
-        "Permission Denied",
-        "Your account can open this page but cannot apply import changes.",
-      );
-      return;
-    }
-    const importTerm = normalizeTermLabel(
-      detectedTerm || selectedSemester || "",
-    );
-    if (
-      !isAdmin &&
-      importType === "schedule" &&
-      importTerm &&
-      isTermLocked?.(importTerm)
-    ) {
-      showNotification?.(
-        "warning",
-        "Semester Locked",
-        `Schedules for ${importTerm} are archived or locked. Import is disabled.`,
-      );
-      return;
-    }
     setIsCommitting(true);
     try {
       const result = await commitTransaction(

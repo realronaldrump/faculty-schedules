@@ -38,7 +38,6 @@ import {
 } from "firebase/firestore";
 import { logCreate, logDelete, logUpdate } from "../../utils/changeLogger";
 import ConfirmDialog from "../shared/ConfirmDialog";
-import { usePermissions } from "../../utils/permissions";
 import { fetchSchedulesByTerm } from "../../utils/dataImportUtils";
 import { assignMeetingPatternSpaces } from "../../utils/meetingPatternUtils";
 import {
@@ -60,8 +59,6 @@ const ScheduleGridStudio = lazy(() =>
 );
 
 const RoomGridGenerator = () => {
-  const { canEdit } = usePermissions();
-  const canEditHere = canEdit("scheduling/rooms");
   const {
     availableSemesters = [],
     selectedSemester,
@@ -1100,10 +1097,6 @@ const RoomGridGenerator = () => {
   }, [fetchSavedGrids]);
 
   const saveGrid = async () => {
-    if (!canEditHere) {
-      showMessage("You do not have permission to save grids.", "error");
-      return;
-    }
     if (!scheduleHtml || !selectedBuilding || !selectedRoom) {
       showMessage(
         "Generate a schedule first, and ensure building/room are selected.",
@@ -1164,10 +1157,6 @@ const RoomGridGenerator = () => {
     studioDocument,
     { templateId = "", asCopy = false } = {},
   ) => {
-    if (!canEditHere) {
-      throw new Error("You do not have permission to save schedule templates.");
-    }
-
     const studio = normalizeStudioDocument(studioDocument);
     if (asCopy) {
       studio.name = `${studio.name} copy`;
@@ -1214,9 +1203,6 @@ const RoomGridGenerator = () => {
   };
 
   const toggleFavoriteStudioTemplate = async (template) => {
-    if (!canEditHere) {
-      throw new Error("You do not have permission to organize schedule templates.");
-    }
     if (!template?.id || !template?.studio) return;
     const studio = normalizeStudioDocument({
       ...template.studio,
@@ -1237,9 +1223,6 @@ const RoomGridGenerator = () => {
   };
 
   const deleteStudioTemplate = async (template) => {
-    if (!canEditHere) {
-      throw new Error("You do not have permission to delete schedule templates.");
-    }
     if (!template?.id) return;
     await deleteDoc(doc(db, "roomGrids", template.id));
     logDelete(
@@ -1325,20 +1308,12 @@ const RoomGridGenerator = () => {
   };
 
   const deleteSavedGrid = async (grid) => {
-    if (!canEditHere) {
-      showMessage("You do not have permission to delete grids.", "error");
-      return;
-    }
     if (!grid) return;
     setDeleteGridConfirm({ isOpen: true, grid });
   };
 
   const handleConfirmDelete = async () => {
     if (!deleteGridConfirm.grid) return;
-    if (!canEditHere) {
-      showMessage("You do not have permission to delete grids.", "error");
-      return;
-    }
     try {
       await deleteDoc(
         doc(collection(db, "roomGrids"), deleteGridConfirm.grid.id),
@@ -1432,7 +1407,6 @@ const RoomGridGenerator = () => {
               processedTerm !== loadedTerm)
           }
           isLoadingTemplates={isLoadingSaved}
-          canSave={canEditHere}
           onBack={() => {
             setStudioSession(null);
             fetchSavedGrids();
@@ -1888,7 +1862,7 @@ const RoomGridGenerator = () => {
                     </div>
 
                     {/* Save Grid Button - only when schedule is generated */}
-                    {canEditHere && !multiRoomMode && scheduleHtml && (
+                    {!multiRoomMode && scheduleHtml && (
                       <button
                         onClick={saveGrid}
                         disabled={isSaving}

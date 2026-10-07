@@ -8,7 +8,6 @@ import {
   Download,
   Trash2,
   Users,
-  Info,
 } from "lucide-react";
 import { useData } from "../../contexts/DataContext";
 import { useSchedules } from "../../contexts/ScheduleContext";
@@ -55,10 +54,9 @@ const RoomReservations = () => {
   const { scheduleData = [], spacesList = [], selectedSemester } = useData();
   const { selectedTermMeta } = useSchedules();
   const { showNotification } = useUI();
-  const { canAccess, user, profile } = useAuth();
+  const { user, userProfile } = useAuth();
 
-  const canManage = canAccess("scheduling/rooms");
-  const currentEmail = user?.email || profile?.email || "";
+  const currentEmail = user?.email || userProfile?.email || "";
 
   const [reservations, setReservations] = useState([]);
   const [form, setForm] = useState({
@@ -67,7 +65,7 @@ const RoomReservations = () => {
     start: "12:00",
     end: "13:00",
     title: "",
-    requesterName: profile?.displayName || profile?.name || "",
+    requesterName: userProfile?.displayName || user?.displayName || "",
     requesterEmail: currentEmail,
     purpose: "",
     headcount: "",
@@ -193,7 +191,6 @@ const RoomReservations = () => {
   }, [selectedSpace]);
 
   const canSubmit =
-    canManage &&
     selectedSpace &&
     form.date &&
     validTimes &&
@@ -249,7 +246,6 @@ const RoomReservations = () => {
   };
 
   const handleCancel = async (reservation) => {
-    if (!canManage) return;
     try {
       await deleteReservation(reservation.id);
       trackAction("room_reservation_cancelled");
@@ -304,13 +300,6 @@ const RoomReservations = () => {
           Conflicts with classes and other reservations are checked automatically.
         </p>
       </div>
-
-      {!canManage && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex gap-2">
-          <Info className="w-5 h-5 flex-shrink-0" />
-          You can view reservations but need room-scheduling access to create them.
-        </div>
-      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Booking form */}
@@ -530,16 +519,14 @@ const RoomReservations = () => {
                         <Download className="w-3.5 h-3.5" />
                         Outlook
                       </button>
-                      {canManage && (
-                        <button
-                          type="button"
-                          onClick={() => handleCancel(r)}
-                          className="ml-2 inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          Cancel
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleCancel(r)}
+                        className="ml-2 inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Cancel
+                      </button>
                     </td>
                   </tr>
                 ))}

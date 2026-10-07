@@ -300,7 +300,6 @@ export const SHEET_DEFINITIONS = Object.freeze({
       column("term", "Semester", 18),
       column("termCode", "Semester Code", 12),
       column("status", "Status", 12),
-      column("locked", "Locked", 10),
       column("startDate", "Start Date", 14),
       column("endDate", "End Date", 14),
       column("sectionCount", "Section Count", 14),

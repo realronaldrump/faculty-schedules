@@ -7,7 +7,6 @@ import DirectorRoleBadge from "../shared/DirectorRoleBadge";
 import { doc, deleteDoc } from "firebase/firestore";
 import { db, COLLECTIONS } from "../../firebase";
 import { logDelete } from "../../utils/changeLogger";
-import { usePermissions } from "../../utils/permissions";
 import {
   getProgramNameKey,
   isReservedProgramName,
@@ -36,8 +35,6 @@ const ProgramManagement = ({ embedded = false }) => {
     handleDirectorAssignmentChange,
   } = usePeopleOperations();
   const { showNotification } = useUI();
-  const { canEdit } = usePermissions();
-  const canEditHere = canEdit("people/programs");
 
   const [selectedFacultyForCard, setSelectedFacultyForCard] = useState(null);
   const [managingDirectorsFor, setManagingDirectorsFor] = useState(null);
@@ -349,14 +346,6 @@ const ProgramManagement = ({ embedded = false }) => {
 
   // Start editing program name
   const startEditingProgramName = (program) => {
-    if (!canEditHere) {
-      showNotification(
-        "warning",
-        "Permission Denied",
-        "You do not have permission to edit program names.",
-      );
-      return;
-    }
     setEditingProgramName(program.name);
     setEditNameValue(program.name);
   };
@@ -383,15 +372,6 @@ const ProgramManagement = ({ embedded = false }) => {
   };
 
   const startEditingProgramCode = (program) => {
-    if (!canEditHere) {
-      showNotification(
-        "warning",
-        "Permission Denied",
-        "You do not have permission to edit program codes.",
-      );
-      return;
-    }
-
     setEditingProgramCode(program.programId || program.name);
     setEditCodeValue(String(program.rawProgram?.code || ""));
   };
@@ -435,15 +415,6 @@ const ProgramManagement = ({ embedded = false }) => {
 
   // Create new program
   const createNewProgram = async () => {
-    if (!canEditHere) {
-      showNotification(
-        "warning",
-        "Permission Denied",
-        "You do not have permission to create programs.",
-      );
-      return;
-    }
-
     const programName = normalizeProgramName(newProgramName);
 
     if (!programName) {
@@ -498,7 +469,7 @@ const ProgramManagement = ({ embedded = false }) => {
 
   // Delete program
   const deleteProgram = async () => {
-    if (!programToDelete || !canEditHere) return;
+    if (!programToDelete) return;
 
     const program = programData[programToDelete];
     if (!program) return;
@@ -567,54 +538,39 @@ const ProgramManagement = ({ embedded = false }) => {
             </div>
             <div className="flex items-center gap-3">
               {/* Edit Mode Toggle */}
-              {canEditHere && (
-                <button
-                  onClick={() => setIsEditMode(!isEditMode)}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                    isEditMode
-                      ? "bg-amber-100 text-amber-800 border-2 border-amber-300"
-                      : "bg-white text-gray-700 border-2 border-gray-300 hover:border-[#154734] hover:text-[#154734]"
-                  }`}
-                  title={
-                    isEditMode
-                      ? "Exit edit mode"
-                      : "Enter edit mode to reorganize faculty"
-                  }
-                >
-                  {isEditMode ? (
-                    <>
-                      <Eye size={18} />
-                      <span className="hidden sm:inline">View Mode</span>
-                      <span className="sm:hidden">Done</span>
-                    </>
-                  ) : (
-                    <>
-                      <Move size={18} />
-                      <span className="hidden sm:inline">Edit Mode</span>
-                      <span className="sm:hidden">Edit</span>
-                    </>
-                  )}
-                </button>
-              )}
+              <button
+                onClick={() => setIsEditMode(!isEditMode)}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+                  isEditMode
+                    ? "bg-amber-100 text-amber-800 border-2 border-amber-300"
+                    : "bg-white text-gray-700 border-2 border-gray-300 hover:border-[#154734] hover:text-[#154734]"
+                }`}
+                title={
+                  isEditMode
+                    ? "Exit edit mode"
+                    : "Enter edit mode to reorganize faculty"
+                }
+              >
+                {isEditMode ? (
+                  <>
+                    <Eye size={18} />
+                    <span className="hidden sm:inline">View Mode</span>
+                    <span className="sm:hidden">Done</span>
+                  </>
+                ) : (
+                  <>
+                    <Move size={18} />
+                    <span className="hidden sm:inline">Edit Mode</span>
+                    <span className="sm:hidden">Edit</span>
+                  </>
+                )}
+              </button>
 
               <button
                 onClick={() => {
-                  if (!canEditHere) {
-                    showNotification(
-                      "warning",
-                      "Permission Denied",
-                      "You do not have permission to create programs.",
-                    );
-                    return;
-                  }
                   setShowCreateProgram(true);
                 }}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                  canEditHere
-                    ? "bg-[#154734] text-white hover:bg-[#0f3526] shadow-sm hover:shadow"
-                    : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                }`}
-                disabled={!canEditHere}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all bg-[#154734] text-white hover:bg-[#0f3526] shadow-sm hover:shadow"
               >
                 <Plus size={18} />
                 Add Program
@@ -625,7 +581,7 @@ const ProgramManagement = ({ embedded = false }) => {
       </div>
 
       {/* Edit Mode Banner */}
-      {isEditMode && canEditHere && (
+      {isEditMode && (
         <div className="bg-amber-50 border-b-2 border-amber-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
             <div className="flex items-center justify-between">
@@ -715,7 +671,7 @@ const ProgramManagement = ({ embedded = false }) => {
                 ? "Try adjusting your search terms or filters to find what you're looking for."
                 : "Get started by creating your first program to organize your faculty."}
             </p>
-            {!searchText && canEditHere && (
+            {!searchText && (
               <button
                 onClick={() => setShowCreateProgram(true)}
                 className="mt-6 inline-flex items-center gap-2 px-4 py-2 bg-[#154734] text-white rounded-lg font-medium hover:bg-[#0f3526] transition-colors"
@@ -791,15 +747,13 @@ const ProgramManagement = ({ embedded = false }) => {
                             <h3 className="text-lg font-semibold text-gray-900 truncate">
                               {programName}
                             </h3>
-                            {canEditHere && (
-                              <button
-                                onClick={() => startEditingProgramName(program)}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-[#154734]"
-                                title="Edit program name"
-                              >
-                                <Edit size={14} />
-                              </button>
-                            )}
+                            <button
+                              onClick={() => startEditingProgramName(program)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-[#154734]"
+                              title="Edit program name"
+                            >
+                              <Edit size={14} />
+                            </button>
                           </div>
                         )}
 
@@ -846,15 +800,13 @@ const ProgramManagement = ({ embedded = false }) => {
                               <code className="text-xs text-gray-500">
                                 {programCode || "None"}
                               </code>
-                              {canEditHere && (
-                                <button
-                                  onClick={() => startEditingProgramCode(program)}
-                                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-[#154734]"
-                                  title="Edit program code"
-                                >
-                                  <Edit size={12} />
-                                </button>
-                              )}
+                              <button
+                                onClick={() => startEditingProgramCode(program)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-[#154734]"
+                                title="Edit program code"
+                              >
+                                <Edit size={12} />
+                              </button>
                             </div>
                           )}
                         </div>
@@ -888,23 +840,21 @@ const ProgramManagement = ({ embedded = false }) => {
                       </div>
 
                       {/* Actions Menu */}
-                      {canEditHere && (
-                        <div className="relative">
-                          <button
-                            onClick={() =>
-                              setProgramToDelete(
-                                programToDelete === programName
-                                  ? null
-                                  : programName,
-                              )
-                            }
-                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete program"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      )}
+                      <div className="relative">
+                        <button
+                          onClick={() =>
+                            setProgramToDelete(
+                              programToDelete === programName
+                                ? null
+                                : programName,
+                            )
+                          }
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete program"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -915,7 +865,7 @@ const ProgramManagement = ({ embedded = false }) => {
                         <UserCog size={16} className="text-amber-600" />
                         Program Directors
                       </div>
-                      {canEditHere && program.programId && (
+                      {program.programId && (
                         <button
                           onClick={() =>
                             setManagingDirectorsFor(
@@ -1126,16 +1076,16 @@ const ProgramManagement = ({ embedded = false }) => {
                           {displayFaculty.map((faculty) => (
                             <div
                               key={faculty.id}
-                              draggable={isEditMode && canEditHere}
+                              draggable={isEditMode}
                               onDragStart={(e) => handleDragStart(e, faculty)}
                               className={`group flex items-center gap-3 p-3 rounded-lg border transition-all ${
-                                isEditMode && canEditHere
+                                isEditMode
                                   ? "cursor-move bg-white border-gray-300 shadow-sm hover:border-[#154734] hover:shadow-md"
                                   : "bg-white border-gray-200 hover:border-gray-300"
                               } ${draggedFaculty?.id === faculty.id ? "opacity-50" : ""}`}
                             >
                               {/* Drag Handle - only visible in edit mode */}
-                              {isEditMode && canEditHere ? (
+                              {isEditMode ? (
                                 <div className="flex-shrink-0 w-6 h-6 rounded bg-gray-100 flex items-center justify-center">
                                   <GripVertical
                                     size={14}
@@ -1280,17 +1230,17 @@ const ProgramManagement = ({ embedded = false }) => {
                   {unassignedProgram.faculty.map((faculty) => (
                     <div
                       key={faculty.id}
-                      draggable={isEditMode && canEditHere}
+                      draggable={isEditMode}
                       onDragStart={(e) => handleDragStart(e, faculty)}
                       className={`group bg-white rounded-lg border p-4 transition-all ${
-                        isEditMode && canEditHere
+                        isEditMode
                           ? "cursor-move border-gray-300 shadow-sm hover:border-[#154734] hover:shadow-md"
                           : "border-gray-200 hover:border-gray-300"
                       } ${draggedFaculty?.id === faculty.id ? "opacity-50" : ""}`}
                     >
                       <div className="flex items-start gap-3">
                         {/* Drag Handle - only visible in edit mode */}
-                        {isEditMode && canEditHere ? (
+                        {isEditMode ? (
                           <div className="flex-shrink-0 w-6 h-6 rounded bg-gray-100 flex items-center justify-center mt-0.5">
                             <GripVertical size={14} className="text-gray-500" />
                           </div>

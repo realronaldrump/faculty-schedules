@@ -1,6 +1,6 @@
 # Faculty Schedules Dashboard
 
-Operational dashboard for Baylor Human Sciences & Design scheduling, people directory operations, imports, access control, and facilities monitoring.
+Operational dashboard for Baylor Human Sciences & Design scheduling, people directory operations, imports, and facilities monitoring.
 
 ## Status
 
@@ -55,10 +55,10 @@ npm test -- --run
 
 - `src/utils/dataHygiene.js` (Firestore-coupled operations) over `src/utils/hygieneCore.js` (pure logic)
 
-### Permission layer
+### Access model
 
-- `src/utils/permissions.js`
-  - Mapping-driven permission factory preserving existing `can*` API shape.
+- Every approved account (`users/{uid}.status == "active"`) can use the whole app; unapproved accounts see `src/components/AccountStatusScreen.jsx` before any data loads.
+- The owner UID (`src/utils/owner.js`, duplicated in `firestore.rules`) also gets User Activity and the Accounts page for approving sign-ups.
 
 ### Person directory configs
 

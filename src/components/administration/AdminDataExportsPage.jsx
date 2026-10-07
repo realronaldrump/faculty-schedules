@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Download, FileSpreadsheet, Loader2 } from "lucide-react";
-import { useAuth } from "../../contexts/AuthContext.jsx";
 import PageHeader from "../shared/PageHeader";
 import { useSchedules } from "../../contexts/ScheduleContext.jsx";
 import { useUI } from "../../contexts/UIContext.jsx";
@@ -31,7 +30,6 @@ const waitForPaint = () =>
   });
 
 const AdminDataExportsPage = () => {
-  const { isAdmin } = useAuth();
   const { showNotification } = useUI();
   const { buildingConfig } = useAppConfig();
   const { selectedSemester, termOptions, getTermByLabel } = useSchedules();
@@ -208,13 +206,6 @@ const AdminDataExportsPage = () => {
     setExportStatus("");
   };
 
-  if (!isAdmin) {
-    return (
-      <div className="bg-white rounded-lg border border-gray-200 p-6 text-gray-700">
-        Only administrators can access the Data Exports page.
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">

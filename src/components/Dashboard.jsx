@@ -8,7 +8,7 @@ import { trackAction } from "../utils/activityTracking";
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { user, userProfile, canAccess, isAdmin, isActivityOwner } = useAuth();
+  const { user, userProfile, isOwner } = useAuth();
   const { pinnedPages, togglePinPage, isPinned } = useUI();
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -18,52 +18,10 @@ const Dashboard = () => {
     (user?.email ? user.email.split("@")[0] : "");
   const firstName = displayName ? displayName.split(" ")[0] : "";
 
-  const normalizeRoles = (roles) => {
-    if (Array.isArray(roles)) return roles.filter(Boolean);
-    if (roles && typeof roles === "object") {
-      return Object.keys(roles).filter((key) => roles[key]);
-    }
-    if (typeof roles === "string" && roles.trim()) return [roles.trim()];
-    return [];
-  };
-
-  const userRoles = useMemo(
-    () => normalizeRoles(userProfile?.roles),
-    [userProfile?.roles],
-  );
-
-  const shouldHideForRole = useCallback(
-    (item) => {
-      if (!item) return true;
-      if (item?.adminOnly && !isAdmin) return true;
-      if (item?.ownerOnly && !isActivityOwner) return true;
-      if (item?.hidden) return true;
-      const hiddenRoles = item?.permissions?.hideFromRoles;
-      if (!hiddenRoles || hiddenRoles.length === 0) return false;
-      if (userRoles.length === 0) return false;
-      return userRoles.some((role) => hiddenRoles.includes(role));
-    },
-    [isActivityOwner, isAdmin, userRoles],
-  );
-
-  const hasAccess = useCallback(
-    (pageId) => {
-      if (!pageId) return true;
-      if (typeof canAccess !== "function") return true;
-      return canAccess(pageId);
-    },
-    [canAccess],
-  );
-
   const isItemVisible = useCallback(
-    (item) => {
-      if (!item) return false;
-      if (shouldHideForRole(item)) return false;
-      const accessId = item.accessId || item.path;
-      if (!accessId) return false;
-      return hasAccess(accessId);
-    },
-    [hasAccess, shouldHideForRole],
+    (item) =>
+      Boolean(item?.path) && !item.hidden && (!item.ownerOnly || isOwner),
+    [isOwner],
   );
 
   const handleNavigate = useCallback(

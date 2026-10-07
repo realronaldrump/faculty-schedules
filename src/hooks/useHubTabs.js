@@ -1,27 +1,26 @@
 import { useMemo, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../contexts/AuthContext.jsx";
 
 const EMPTY_REDIRECTS = {};
 
 /**
  * useHubTabs - unified tab state machine for hub components.
  *
- * Replaces the per-hub copies of access filtering, URL parsing, and tab-sync
- * effects with one hook that supports both URL strategies the hubs use:
+ * Replaces the per-hub copies of URL parsing and tab-sync effects with one
+ * hook that supports both URL strategies the hubs use:
  *
  *  - 'query': tab lives in `?tab=<id>` on a single `canonicalPath`
  *    (Faculty, Rooms, Student Workers).
  *  - 'path':  each tab has its own route `path` (Courses, People, Facilities).
  *
  * @param {Object} opts
- * @param {Array}  opts.tabs - tab definitions: `{ id, accessId, path?, preserveQuery? }`
+ * @param {Array}  opts.tabs - tab definitions: `{ id, path?, preserveQuery? }`
  * @param {string} [opts.initialTab] - tab from route props
  * @param {'query'|'path'} [opts.strategy='query']
  * @param {string} [opts.canonicalPath] - base path for the 'query' strategy
  * @param {Object} [opts.redirects] - 'query' strategy: map of legacy `?tab=` values
  *   to external paths to redirect to (e.g. `{ calendar: '/tools/outlook-export' }`)
- * @returns {{ availableTabs: Array, activeTab: string, handleTabChange: (id:string)=>void }}
+ * @returns {{ activeTab: string, handleTabChange: (id:string)=>void }}
  */
 export function useHubTabs({
   tabs,
@@ -32,13 +31,6 @@ export function useHubTabs({
 }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { canAccess } = useAuth();
-
-  const availableTabs = useMemo(
-    () => tabs.filter((tab) => canAccess(tab.accessId)),
-    [tabs, canAccess],
-  );
-
   const tabFromUrl = useMemo(() => {
     const params = new URLSearchParams(location.search);
     return params.get("tab");
@@ -54,17 +46,15 @@ export function useHubTabs({
     [tabs, currentPath],
   );
 
-  const fallbackTab = availableTabs[0]?.id || tabs[0].id;
+  const fallbackTab = tabs[0].id;
 
   const resolvedTab = useMemo(() => {
     const candidate =
       strategy === "path"
         ? tabFromPath || tabFromUrl || initialTab || fallbackTab
         : tabFromUrl || initialTab || fallbackTab;
-    return availableTabs.some((tab) => tab.id === candidate)
-      ? candidate
-      : fallbackTab;
-  }, [strategy, tabFromPath, tabFromUrl, initialTab, fallbackTab, availableTabs]);
+    return tabs.some((tab) => tab.id === candidate) ? candidate : fallbackTab;
+  }, [strategy, tabFromPath, tabFromUrl, initialTab, fallbackTab, tabs]);
 
   const [activeTab, setActiveTab] = useState(resolvedTab);
 
@@ -109,5 +99,5 @@ export function useHubTabs({
     }
   };
 
-  return { availableTabs, activeTab, handleTabChange };
+  return { activeTab, handleTabChange };
 }

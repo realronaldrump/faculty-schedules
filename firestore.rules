@@ -1,769 +1,119 @@
-// Firestore rules - role + status aware access control
+// Firestore rules — approval-based access.
+// Every approved account can read and write all app data. The owner (the
+// developer) additionally approves/disables accounts and reads activity
+// telemetry. Data validation lives in the app's write paths, not here: rules
+// that validate whole documents reject edits over fields the user never touched.
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function isSignedIn() { return request.auth != null; }
 
-    function userDoc() { return /databases/$(database)/documents/users/$(request.auth.uid); }
-    function accessControlDoc() { return /databases/$(database)/documents/settings/accessControl; }
-    function hasUserProfile() { return isSignedIn() && exists(userDoc()); }
+    function isSelf(userId) { return isSignedIn() && request.auth.uid == userId; }
 
-    function roleValueIsTruthy(value) {
-      return value == true ||
-        (value is int && value != 0) ||
-        (value is float && value != 0) ||
-        (value is string && value.size() > 0) ||
-        (value is map && value.size() > 0) ||
-        (value is list && value.size() > 0);
+    // Owner UID is duplicated in src/utils/owner.js (client source of truth);
+    // update both places if it ever changes.
+    function isOwner() {
+      return isSignedIn() && request.auth.uid == 'fjQuh4iAMFYi8URf35Yv5RRijKw2';
     }
 
-    // Check user's Firestore profile for a role (supports list/map/string formats)
-    function userHasRole(role) {
-      return hasUserProfile() && (
-        (get(userDoc()).data.roles is list && role in get(userDoc()).data.roles) ||
-        (get(userDoc()).data.roles is map && roleValueIsTruthy(get(userDoc()).data.roles[role])) ||
-        (get(userDoc()).data.roles is string && get(userDoc()).data.roles == role)
+    function isActiveProfile(userPath) {
+      return exists(userPath) &&
+        get(userPath).data.get('status', null) == 'active' &&
+        get(userPath).data.get('disabled', false) != true;
+    }
+
+    function isApproved() {
+      return isOwner() || (
+        isSignedIn() &&
+        isActiveProfile(/databases/$(database)/documents/users/$(request.auth.uid))
       );
     }
 
-    // Check user's Firestore profile for admin role (supports list/map/string formats)
-    function userHasAdminRole() {
-      return userHasRole('admin');
+    function isAppCollection(collection) {
+      return collection in [
+        'settings', 'people', 'schedules', 'rooms', 'programs', 'courses', 'terms',
+        'reservations', 'roomGrids', 'outlookExceptions', 'emailListPresets',
+        'baylorAcronyms', 'changeLog', 'editHistory', 'dedupeDecisions',
+        'maintenanceReports', 'importTransactions', 'importRuns', 'importRowLineage',
+        'temperatureBuildingSettings', 'temperatureDevices', 'temperatureDeviceReadings',
+        'temperatureRoomSnapshots', 'temperatureImports', 'temperatureImportJobs',
+        'temperatureRoomAggregates'
+      ];
     }
 
-    function userHasKnownRole() {
-      return userHasRole('admin') || userHasRole('staff') || userHasRole('faculty');
+    match /{collection}/{docId} {
+      allow read, write: if isAppCollection(collection) && isApproved();
     }
 
-    function userStatus() {
-      return hasUserProfile() ? get(userDoc()).data.status : null;
-    }
-
-    function userIsDisabled() {
-      return hasUserProfile() &&
-        (get(userDoc()).data.disabled == true || userStatus() == 'disabled');
-    }
-
-    function userIsActive() {
-      return hasUserProfile() &&
-        !userIsDisabled() &&
-        (userStatus() == 'active' || (userStatus() == null && userHasKnownRole()));
-    }
-
-    // Direct user page grants (supports wildcard)
-    function userHasDirectPage(pageId) {
-      return hasUserProfile() &&
-        get(userDoc()).data.permissions is map &&
-        (
-          get(userDoc()).data.permissions[pageId] == true ||
-          get(userDoc()).data.permissions['*'] == true
-        );
-    }
-
-    function userHasDirectPageDeny(pageId) {
-      return hasUserProfile() &&
-        get(userDoc()).data.permissions is map &&
-        (
-          (pageId in get(userDoc()).data.permissions &&
-            get(userDoc()).data.permissions[pageId] == false) ||
-          ('*' in get(userDoc()).data.permissions &&
-            get(userDoc()).data.permissions['*'] == false)
-        );
-    }
-
-    // Role-based page grants from settings/accessControl (supports wildcard)
-    function roleHasPage(role, pageId) {
-      return exists(accessControlDoc()) &&
-        get(accessControlDoc()).data.rolePermissions is map &&
-        get(accessControlDoc()).data.rolePermissions[role] is map &&
-        get(accessControlDoc()).data.rolePermissions[role].pages is map &&
-        (
-          get(accessControlDoc()).data.rolePermissions[role].pages[pageId] == true ||
-          get(accessControlDoc()).data.rolePermissions[role].pages['*'] == true
-        );
-    }
-
-    function userHasRolePage(pageId) {
-      return hasUserProfile() && (
-        (userHasRole('admin') && roleHasPage('admin', pageId)) ||
-        (userHasRole('staff') && roleHasPage('staff', pageId)) ||
-        (userHasRole('faculty') && roleHasPage('faculty', pageId))
+    // Accounts: self-registration creates a pending profile; only the owner
+    // approves, disables, or reads other accounts.
+    match /users/{userId} {
+      allow read: if isSelf(userId) || isOwner();
+      allow create: if isSelf(userId) &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.email == request.auth.token.email &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.disabled == false;
+      allow update: if isOwner() || (
+        isSelf(userId) &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['displayName', 'photoURL', 'lastLoginAt', 'lastActiveAt', 'updatedAt'])
       );
+      allow delete: if false;
     }
 
-    // Check if user has a specific page permission (direct or role-based)
-    function userHasPage(pageId) {
-      return isAdmin() ||
-        (userIsActive() && (
-          !userHasDirectPageDeny(pageId) &&
-          (userHasDirectPage(pageId) ||
-            userHasRolePage(pageId))
-        ));
+    // Owner-only activity telemetry; only approved accounts record any.
+    match /userPresence/{userId} {
+      allow read: if isOwner();
+      allow create, update: if isSelf(userId) && isApproved() &&
+        request.resource.data.uid == request.auth.uid;
+      allow delete: if false;
     }
 
-    // Admin = admin role in the Firestore user profile (no custom claims are set).
-    function isAdmin() {
-      return isSignedIn() && userHasAdminRole();
+    match /userActivityEvents/{id} {
+      allow read: if isOwner();
+      allow create: if isApproved() &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.pageId is string;
+      allow update: if false;
+      // The owner console prunes events older than the retention window.
+      allow delete: if isOwner();
     }
 
-    // Owner-only gate for activity telemetry. This UID is duplicated in
-    // src/utils/activityOwner.js (client source of truth); update both places if
-    // it ever changes.
-    function isActivityOwner() {
-      return isSignedIn() &&
-        request.auth.uid == 'fjQuh4iAMFYi8URf35Yv5RRijKw2';
+    // Per-user tutorial progress: each user owns their own document; the owner
+    // can read every document for the completion view.
+    match /tutorialProgress/{userId} {
+      allow read: if isSelf(userId) || isOwner();
+      allow create, update: if isSelf(userId) && isApproved() &&
+        request.resource.data.uid == request.auth.uid;
+      allow delete: if false;
     }
 
     function isOwnActivityDailySummary(summaryId) {
-      return isSignedIn() &&
+      return isApproved() &&
         request.resource.data.uid == request.auth.uid &&
         request.resource.data.dateKey is string &&
         request.resource.data.dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
         summaryId == request.resource.data.dateKey + '_' + request.auth.uid;
     }
 
-    // Admin-only access for sensitive operations
-    function canWrite() {
-      return isAdmin();
-    }
-
-    // Pending (self-registered, unapproved) users intentionally get NO app-data
-    // read access — only their own users/{uid} doc, handled by the /users rule.
-    function canReadAppData() {
-      return isAdmin() || userIsActive();
-    }
-
-    function canManagePeople() {
-      return userHasPage('people/directory') ||
-        userHasPage('admin-tools/import-wizard') ||
-        userHasPage('data/import-wizard');
-    }
-
-    function canManagePafWorkflow() {
-      return userHasPage('workflows/paf') ||
-        (
-          userIsActive() &&
-          !userHasDirectPageDeny('workflows/paf') &&
-          userHasPage('people/directory')
-        );
-    }
-
-    function isValidPafIgniteUpdate() {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'ignitePersonNumber',
-          'ignitePersonId',
-          'igniteId',
-          'personNumber',
-          'person_number',
-          'Person Number',
-          'externalIds',
-          'updatedAt'
-        ]) &&
-        request.resource.data.ignitePersonNumber is string &&
-        request.resource.data.ignitePersonNumber.matches('^[0-9]*$') &&
-        isValidPafIgniteAlias('ignitePersonId') &&
-        isValidPafIgniteAlias('igniteId') &&
-        isValidPafIgniteAlias('personNumber') &&
-        isValidPafIgniteAlias('person_number') &&
-        isValidPafIgniteAlias('Person Number') &&
-        isValidPafIgniteExternalIds() &&
-        (
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['updatedAt']) ||
-          isNonEmptyString(request.resource.data.updatedAt)
-        );
-    }
-
-    function isValidPafIgniteAlias(fieldName) {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([fieldName]) ||
-        (
-          request.resource.data[fieldName] is string &&
-          request.resource.data[fieldName].matches('^[0-9]*$')
-        );
-    }
-
-    function isValidPafIgniteExternalIds() {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['externalIds']) ||
-        (
-          request.resource.data.externalIds is map &&
-          (
-            resource.data.externalIds is map
-              ? request.resource.data.externalIds.diff(resource.data.externalIds).affectedKeys().hasOnly([
-                  'ignitePersonNumber',
-                  'ignitePersonId',
-                  'igniteId',
-                  'personNumber'
-                ])
-              : request.resource.data.externalIds.keys().hasOnly([
-                  'ignitePersonNumber',
-                  'personNumber'
-                ])
-          ) &&
-          isValidPafExternalIgniteAlias('ignitePersonNumber') &&
-          isValidPafExternalIgniteAlias('ignitePersonId') &&
-          isValidPafExternalIgniteAlias('igniteId') &&
-          isValidPafExternalIgniteAlias('personNumber')
-        );
-    }
-
-    function isValidPafExternalIgniteAlias(fieldName) {
-      return !(fieldName in request.resource.data.externalIds) ||
-        (
-          request.resource.data.externalIds[fieldName] is string &&
-          request.resource.data.externalIds[fieldName].matches('^[0-9]*$')
-        );
-    }
-
-    function canManagePrograms() {
-      return userHasPage('people/programs') ||
-        userHasPage('admin-tools/import-wizard') ||
-        userHasPage('data/import-wizard');
-    }
-
-    function canManageSchedules() {
-      return userHasPage('courses/manage') ||
-        userHasPage('admin-tools/import-wizard') ||
-        userHasPage('data/schedule-data') ||
-        userHasPage('data/import-wizard');
-    }
-
-    function canManageCourses() {
-      return userHasPage('courses/manage') ||
-        userHasPage('admin-tools/import-wizard') ||
-        userHasPage('data/schedule-data') ||
-        userHasPage('data/import-wizard');
-    }
-
-    function canManageDepartments() {
-      return userHasPage('courses/manage') ||
-        userHasPage('admin-tools/import-wizard') ||
-        userHasPage('data/schedule-data') ||
-        userHasPage('data/import-wizard');
-    }
-
-    function canManageTerms() {
-      return userHasPage('admin/settings') ||
-        userHasPage('admin-tools/import-wizard') ||
-        userHasPage('data/import-wizard');
-    }
-
-    function canManageRooms() {
-      return userHasPage('facilities/spaces') ||
-        userHasPage('people/directory') ||
-        userHasPage('admin-tools/import-wizard') ||
-        userHasPage('data/import-wizard');
-    }
-
-    function canManageAcronyms() {
-      return userHasPage('help/acronyms');
-    }
-
-    function profileHasRole(profile, role) {
-      return
-        (profile.roles is list && role in profile.roles) ||
-        (profile.roles is map && role in profile.roles &&
-          roleValueIsTruthy(profile.roles[role])) ||
-        (profile.roles is string && profile.roles == role);
-    }
-
-    function profileIsActive(profile, hasKnownRole) {
-      return profile.disabled != true &&
-        profile.status != 'disabled' &&
-        (
-          profile.status == 'active' ||
-          (profile.status == null && hasKnownRole)
-        );
-    }
-
-    function profileHasDirectRoomGrant(profile) {
-      return profile.permissions is map &&
-        (
-          ('scheduling/rooms' in profile.permissions &&
-            profile.permissions['scheduling/rooms'] == true) ||
-          ('*' in profile.permissions && profile.permissions['*'] == true)
-        );
-    }
-
-    function profileHasDirectRoomDeny(profile) {
-      return profile.permissions is map &&
-        (
-          ('scheduling/rooms' in profile.permissions &&
-            profile.permissions['scheduling/rooms'] == false) ||
-          ('*' in profile.permissions && profile.permissions['*'] == false)
-        );
-    }
-
-    function profileHasConfiguredRoomGrant(hasAdminRole, hasStaffRole, hasFacultyRole) {
-      let configured = get(accessControlDoc()).data.rolePermissions;
-      return configured is map && (
-        (hasAdminRole &&
-          configured.admin is map &&
-          configured.admin.pages is map &&
-          (('scheduling/rooms' in configured.admin.pages &&
-            configured.admin.pages['scheduling/rooms'] == true) ||
-            ('*' in configured.admin.pages &&
-              configured.admin.pages['*'] == true))) ||
-        (hasStaffRole &&
-          configured.staff is map &&
-          configured.staff.pages is map &&
-          (('scheduling/rooms' in configured.staff.pages &&
-            configured.staff.pages['scheduling/rooms'] == true) ||
-            ('*' in configured.staff.pages &&
-              configured.staff.pages['*'] == true))) ||
-        (hasFacultyRole &&
-          configured.faculty is map &&
-          configured.faculty.pages is map &&
-          (('scheduling/rooms' in configured.faculty.pages &&
-            configured.faculty.pages['scheduling/rooms'] == true) ||
-            ('*' in configured.faculty.pages &&
-              configured.faculty.pages['*'] == true)))
-      );
-    }
-
-    function canManageRoomGridsForProfile(profile) {
-      let hasAdminRole = profileHasRole(profile, 'admin');
-      let hasStaffRole = profileHasRole(profile, 'staff');
-      let hasFacultyRole = profileHasRole(profile, 'faculty');
-      let hasKnownRole = hasAdminRole || hasStaffRole || hasFacultyRole;
-      return hasAdminRole ||
-        (
-          profileIsActive(profile, hasKnownRole) &&
-          !profileHasDirectRoomDeny(profile) &&
-          (
-            profileHasDirectRoomGrant(profile) ||
-            (exists(accessControlDoc()) &&
-              profileHasConfiguredRoomGrant(
-                hasAdminRole,
-                hasStaffRole,
-                hasFacultyRole
-              ))
-          )
-        );
-    }
-
-    function canManageRoomGrids() {
-      return isSignedIn() &&
-        exists(userDoc()) &&
-        canManageRoomGridsForProfile(get(userDoc()).data);
-    }
-
-    function canManageImports() {
-      return userHasPage('admin-tools/import-wizard') ||
-        userHasPage('data/import-wizard');
-    }
-
-    function canManageDataHygiene() {
-      return userHasPage('admin/data-hygiene');
-    }
-
-    function termIsLocked(termCode) {
-      return termCode is string &&
-        termCode.size() > 0 &&
-        exists(/databases/$(database)/documents/terms/$(termCode)) &&
-        (
-          get(/databases/$(database)/documents/terms/$(termCode)).data.status == 'archived' ||
-          get(/databases/$(database)/documents/terms/$(termCode)).data.locked == true
-        );
-    }
-
-    function canWriteScheduleTerm(termCode) {
-      return termCode is string &&
-        termCode.size() > 0 &&
-        !termIsLocked(termCode);
-    }
-
-    function isSelf(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isSelfProfileCreateAllowed(userId) {
-      return isSelf(userId) &&
-        request.resource.data.uid == request.auth.uid &&
-        request.resource.data.email == request.auth.token.email &&
-        request.resource.data.status == 'pending' &&
-        request.resource.data.roles is list &&
-        request.resource.data.roles.size() == 0 &&
-        request.resource.data.disabled == false;
-    }
-
-    function isSelfProfileUpdateAllowed(userId) {
-      return isSelf(userId) &&
-        request.resource.data.diff(resource.data).changedKeys()
-          .hasOnly(['displayName', 'photoURL', 'lastLoginAt', 'lastActiveAt', 'updatedAt']);
-    }
-
-    function isNonEmptyString(value) {
-      return value is string && value.size() > 0;
-    }
-
-    function isOptionalBaylorIdValue(value) {
-      return value == null ||
-        (value is string && (value.size() == 0 || value.matches('^[0-9]{9}$')));
-    }
-
-    function hasValidOptionalBaylorIds(data) {
-      return (!('baylorId' in data) || isOptionalBaylorIdValue(data.baylorId)) &&
-        (!(data.externalIds is map) ||
-          !('baylorId' in data.externalIds) ||
-          isOptionalBaylorIdValue(data.externalIds.baylorId));
-    }
-
-    function isValidSpaceKey(value) {
-      return value is string && value.matches('^[A-Z0-9_]+:[A-Z0-9./-]+$');
-    }
-
-    function isValidSpaceRecord(data) {
-      return isValidSpaceKey(data.spaceKey) &&
-        isNonEmptyString(data.buildingCode) &&
-        data.buildingCode.matches('^[A-Z0-9_]+$') &&
-        isNonEmptyString(data.spaceNumber) &&
-        data.spaceNumber.matches('^[A-Za-z0-9./-]+$');
-    }
-
-    function isValidPersonCreate(data) {
-      return isNonEmptyString(data.createdAt) &&
-        isNonEmptyString(data.updatedAt) &&
-        (
-          isNonEmptyString(data.baylorId) ||
-          isNonEmptyString(data.email) ||
-          isNonEmptyString(data.ignitePersonNumber) ||
-          isNonEmptyString(data.ignitePersonId) ||
-          isNonEmptyString(data.igniteId) ||
-          isNonEmptyString(data.personNumber) ||
-          isNonEmptyString(data.person_number) ||
-          isNonEmptyString(data['Person Number']) ||
-          (data.externalIds is map &&
-            (isNonEmptyString(data.externalIds.baylorId) ||
-             isNonEmptyString(data.externalIds.clssInstructorId) ||
-             isNonEmptyString(data.externalIds.ignitePersonNumber) ||
-             isNonEmptyString(data.externalIds.ignitePersonId) ||
-             isNonEmptyString(data.externalIds.igniteId) ||
-             isNonEmptyString(data.externalIds.personNumber))) ||
-          isNonEmptyString(data.clssInstructorId)
-        );
-    }
-
-    function hasValidSpaceIds(data) {
-      return data.spaceIds is list &&
-        data.spaceIds.size() <= 20 &&
-        (data.spaceIds.size() < 1 || (data.spaceIds[0] is string && isValidSpaceKey(data.spaceIds[0]))) &&
-        (data.spaceIds.size() < 2 || (data.spaceIds[1] is string && isValidSpaceKey(data.spaceIds[1]))) &&
-        (data.spaceIds.size() < 3 || (data.spaceIds[2] is string && isValidSpaceKey(data.spaceIds[2]))) &&
-        (data.spaceIds.size() < 4 || (data.spaceIds[3] is string && isValidSpaceKey(data.spaceIds[3]))) &&
-        (data.spaceIds.size() < 5 || (data.spaceIds[4] is string && isValidSpaceKey(data.spaceIds[4]))) &&
-        (data.spaceIds.size() < 6 || (data.spaceIds[5] is string && isValidSpaceKey(data.spaceIds[5]))) &&
-        (data.spaceIds.size() < 7 || (data.spaceIds[6] is string && isValidSpaceKey(data.spaceIds[6]))) &&
-        (data.spaceIds.size() < 8 || (data.spaceIds[7] is string && isValidSpaceKey(data.spaceIds[7]))) &&
-        (data.spaceIds.size() < 9 || (data.spaceIds[8] is string && isValidSpaceKey(data.spaceIds[8]))) &&
-        (data.spaceIds.size() < 10 || (data.spaceIds[9] is string && isValidSpaceKey(data.spaceIds[9]))) &&
-        (data.spaceIds.size() < 11 || (data.spaceIds[10] is string && isValidSpaceKey(data.spaceIds[10]))) &&
-        (data.spaceIds.size() < 12 || (data.spaceIds[11] is string && isValidSpaceKey(data.spaceIds[11]))) &&
-        (data.spaceIds.size() < 13 || (data.spaceIds[12] is string && isValidSpaceKey(data.spaceIds[12]))) &&
-        (data.spaceIds.size() < 14 || (data.spaceIds[13] is string && isValidSpaceKey(data.spaceIds[13]))) &&
-        (data.spaceIds.size() < 15 || (data.spaceIds[14] is string && isValidSpaceKey(data.spaceIds[14]))) &&
-        (data.spaceIds.size() < 16 || (data.spaceIds[15] is string && isValidSpaceKey(data.spaceIds[15]))) &&
-        (data.spaceIds.size() < 17 || (data.spaceIds[16] is string && isValidSpaceKey(data.spaceIds[16]))) &&
-        (data.spaceIds.size() < 18 || (data.spaceIds[17] is string && isValidSpaceKey(data.spaceIds[17]))) &&
-        (data.spaceIds.size() < 19 || (data.spaceIds[18] is string && isValidSpaceKey(data.spaceIds[18]))) &&
-        (data.spaceIds.size() < 20 || (data.spaceIds[19] is string && isValidSpaceKey(data.spaceIds[19])));
-    }
-
-    function isValidScheduleCreate(data) {
-      return isNonEmptyString(data.courseCode) &&
-        isNonEmptyString(data.section) &&
-        isNonEmptyString(data.term) &&
-        isNonEmptyString(data.termCode) &&
-        isNonEmptyString(data.identityKey) &&
-        isNonEmptyString(data.identitySource) &&
-        (data.identityKeys is list && data.identityKeys.size() > 0 && data.identityKey in data.identityKeys) &&
-        (
-          data.isOnline == true ||
-          data.locationType == 'no_room' ||
-          hasValidSpaceIds(data)
-        );
-    }
-
-    function isLegacySpaceRecord(data) {
-      return !(data.spaceKey is string) || data.spaceKey.size() == 0;
-    }
-
-    function onlyUpdatesSpaceStatus() {
-      return request.resource.data.diff(resource.data).changedKeys()
-        .hasOnly(['isActive', 'deletedAt', 'updatedAt']);
-    }
-
-    // Settings collection: active users can read; only admin writes
-    match /settings/{docId} {
-      allow read: if canReadAppData();
-      allow write: if canWrite();
-    }
-
-    // Users profiles: user can read/write own; admin can read/write all
-    match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow create: if canWrite() || isSelfProfileCreateAllowed(userId);
-      allow update: if canWrite() || isSelfProfileUpdateAllowed(userId);
-      allow delete: if canWrite();
-    }
-
-    // Owner-only activity telemetry
-    match /userPresence/{userId} {
-      allow read: if isActivityOwner();
-      allow create, update: if isSignedIn() &&
-        request.auth.uid == userId &&
-        request.resource.data.uid == request.auth.uid;
-      allow delete: if false;
-    }
-
-    match /userActivityEvents/{id} {
-      allow read: if isActivityOwner();
-      allow create: if isSignedIn() &&
-        request.resource.data.uid == request.auth.uid &&
-        request.resource.data.pageId is string;
-      allow update: if false;
-      // The owner console prunes events older than the retention window.
-      allow delete: if isActivityOwner();
-    }
-
-    // Per-user tutorial progress: each user owns their own document; the
-    // activity owner can read every document for the admin completion view.
-    match /tutorialProgress/{userId} {
-      allow read: if isSelf(userId) || isActivityOwner();
-      allow create, update: if isSelf(userId) &&
-        request.resource.data.uid == request.auth.uid;
-      allow delete: if false;
-    }
-
     match /userActivityDaily/{id} {
-      allow read: if isActivityOwner();
-      allow create, update: if isActivityOwner() || isOwnActivityDailySummary(id);
-      allow delete: if isActivityOwner();
+      allow read: if isOwner();
+      allow create, update: if isOwner() || isOwnActivityDailySummary(id);
+      allow delete: if isOwner();
     }
 
     match /userActivityAnalyticsDaily/{id} {
-      allow read: if isActivityOwner();
-      allow write: if isActivityOwner();
+      allow read, write: if isOwner();
     }
 
     match /userActivityPageDaily/{id} {
-      allow read: if isActivityOwner();
-      allow write: if isActivityOwner();
+      allow read, write: if isOwner();
     }
 
     // Rollup watermark/state for the automatic activity sync.
     match /userActivityMeta/{id} {
-      allow read: if isActivityOwner();
-      allow write: if isActivityOwner();
-    }
-
-    // People collection (faculty, staff, adjunct, students): granular permissions
-    // hasNoLegacyDirectorFlag: program-director assignments live exclusively on
-    // programs/{id}.directors — writes must never reintroduce people.isUPD.
-    // NOTE: deploy these rules only AFTER running the one-time director
-    // migration (Data Cleanup -> Rare Repair Tools), because pre-migration
-    // documents still carry the legacy field and would fail this check.
-    function hasNoLegacyDirectorFlag() {
-      return !('isUPD' in request.resource.data);
-    }
-
-    match /people/{id} {
-      allow read: if canReadAppData();
-
-      // Create operations - allow users with people directory access (or import wizard)
-      allow create: if canManagePeople() &&
-        isValidPersonCreate(request.resource.data) &&
-        hasValidOptionalBaylorIds(request.resource.data) &&
-        hasNoLegacyDirectorFlag();
-
-      // Update operations - allow people managers, or restricted Ignite # edits from PAF workflow
-      allow update: if (canManagePeople() ||
-        (canManagePafWorkflow() && isValidPafIgniteUpdate())) &&
-        hasValidOptionalBaylorIds(request.resource.data) &&
-        hasNoLegacyDirectorFlag();
-
-      // Delete operations - allow users with people directory access (or import wizard)
-      allow delete: if canManagePeople();
-    }
-    // Schedules collection: granular permissions
-    match /schedules/{id} {
-      allow read: if canReadAppData();
-      allow create: if isAdmin() || (
-        canManageSchedules() &&
-        canWriteScheduleTerm(request.resource.data.termCode) &&
-        isValidScheduleCreate(request.resource.data)
-      );
-      allow update: if isAdmin() || (
-        canManageSchedules() &&
-        canWriteScheduleTerm(request.resource.data.termCode)
-      );
-      allow delete: if isAdmin() || (
-        canManageSchedules() &&
-        canWriteScheduleTerm(resource.data.termCode)
-      );
-    }
-
-    // Programs collection: granular permissions
-    // Canonical program-director model: the only director representation is
-    // the `directors` list ([{ personId, role: 'upd'|'gpd' }]); legacy
-    // updIds/updId fields are rejected. Per-entry validation happens in the
-    // app's single write path (rules cannot iterate lists).
-    // NOTE: deploy only AFTER running the one-time director migration.
-    function hasValidDirectorsShape() {
-      return (!('directors' in request.resource.data) ||
-          request.resource.data.directors is list) &&
-        !('updIds' in request.resource.data) &&
-        !('updId' in request.resource.data);
-    }
-
-    match /programs/{id} {
-      allow read: if canReadAppData();
-      allow create: if canManagePrograms() && hasValidDirectorsShape();
-      allow update: if canManagePrograms() && hasValidDirectorsShape();
-      allow delete: if canManagePrograms();
-    }
-
-    // Departments collection: granular permissions
-    match /departments/{id} {
-      allow read: if canReadAppData();
-      allow create: if canManageDepartments();
-      allow update: if canManageDepartments();
-      allow delete: if canManageDepartments();
-    }
-
-    // Courses collection: granular permissions
-    match /courses/{id} {
-      allow read: if canReadAppData();
-      allow create: if canManageCourses();
-      allow update: if canManageCourses();
-      allow delete: if canManageCourses();
-    }
-
-    // Terms collection: granular permissions
-    match /terms/{id} {
-      allow read: if canReadAppData();
-      allow create: if canManageTerms();
-      allow update: if canManageTerms();
-      allow delete: if canManageTerms();
-    }
-
-    // Rooms collection: granular permissions
-    // Admins have FULL access without validation; non-admins must pass validation
-    match /rooms/{id} {
-      allow read: if canReadAppData();
-      allow create: if isAdmin() ||
-        (canManageRooms() &&
-          isValidSpaceRecord(request.resource.data) &&
-          id == request.resource.data.spaceKey);
-      allow update: if isAdmin() ||
-        (canManageRooms() &&
-          (isValidSpaceRecord(request.resource.data) ||
-            (isLegacySpaceRecord(resource.data) && onlyUpdatesSpaceStatus())));
-      allow delete: if canManageRooms();
-    }
-
-    // Temperature monitoring collections: all authenticated users can read/write
-    match /temperatureBuildingSettings/{id} {
-      allow read, write: if canReadAppData();
-    }
-    match /temperatureDevices/{id} {
-      allow read, write: if canReadAppData();
-    }
-    match /temperatureDeviceReadings/{id} {
-      allow read, write: if canReadAppData();
-    }
-    match /temperatureRoomSnapshots/{id} {
-      allow read, write: if canReadAppData();
-    }
-    match /temperatureImports/{id} {
-      allow read, write: if canReadAppData();
-    }
-    match /temperatureImportJobs/{id} {
-      allow read, write: if canReadAppData();
-    }
-    match /temperatureRoomAggregates/{id} {
-      allow read, write: if canReadAppData();
-    }
-
-    // Acronyms collection: granular permissions
-    match /baylorAcronyms/{id} {
-      allow read: if canReadAppData();
-      allow create: if canManageAcronyms();
-      allow update: if canManageAcronyms();
-      allow delete: if canManageAcronyms();
-    }
-
-    // Change logs
-    // - Allow any signed-in user to READ recent changes (dashboard visibility)
-    // - Only admins can WRITE
-    match /changeLog/{id} {
-      allow read: if canReadAppData();
-      allow write: if canWrite();
-    }
-    // Legacy edit history
-    // - Allow signed-in read to avoid noisy permission warnings in UI
-    // - Only admins can write
-    match /editHistory/{id} {
-      allow read: if canReadAppData();
-      allow write: if canWrite();
-    }
-
-    // Import transactions (for preview, commit summary, and rollback)
-    match /importTransactions/{id} {
-      allow read: if canManageImports();
-      allow write: if canManageImports();
-    }
-    // Import runs + row lineage (idempotency tracking)
-    match /importRuns/{id} {
-      allow read: if canManageImports();
-      allow write: if canManageImports();
-    }
-    match /importRowLineage/{id} {
-      allow read: if canManageImports();
-      allow write: if canManageImports();
-    }
-
-    // Dedupe decisions: allow hygiene tooling to persist "not a duplicate" choices
-    match /dedupeDecisions/{id} {
-      allow read: if canReadAppData();
-      allow write: if canManageDataHygiene();
-    }
-
-    // Maintenance reports: audit trail saved by the historical-baseline backfill
-    // (Data Cleanup). Append-only.
-    match /maintenanceReports/{id} {
-      allow read: if canManageDataHygiene();
-      allow create: if canManageDataHygiene();
-      allow update, delete: if false;
-    }
-
-    // Shared no-class dates used by Room Calendar Export.
-    match /outlookExceptions/{id} {
-      allow read: if canReadAppData();
-      allow create, update, delete: if canManageRoomGrids();
-    }
-
-    // Room grids: allow writes for users who can access room scheduling tools
-    match /roomGrids/{id} {
-      allow read: if canReadAppData();
-      allow create: if canManageRoomGrids();
-      allow update: if canManageRoomGrids();
-      allow delete: if canManageRoomGrids();
-    }
-
-    // Room reservations: self-serve bookings layered on the class schedule.
-    // Active users can read; users with room-scheduling access can manage.
-    match /reservations/{id} {
-      allow read: if canReadAppData();
-      allow create: if canManageRoomGrids();
-      allow update: if canManageRoomGrids();
-      allow delete: if canManageRoomGrids();
-    }
-
-    // Email List Presets: shared presets that any signed-in user can create/edit
-    // Only admins can delete presets
-    match /emailListPresets/{id} {
-      allow read: if canReadAppData();
-      allow create, update: if canReadAppData();
-      allow delete: if isAdmin();
+      allow read, write: if isOwner();
     }
   }
 }

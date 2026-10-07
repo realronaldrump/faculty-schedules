@@ -60,7 +60,7 @@ export { getImportTransactions, deleteTransaction } from './transaction-store';
 
 // Preview import changes without committing to database
 export const previewImportChanges = async (csvData, importType, selectedSemester, options = {}) => {
-  const { persist = true, includeOfficeRooms = true, importMetadata = {} } = options;
+  const { persist = true, importMetadata = {} } = options;
   const normalizedSemester = normalizeTermLabel(selectedSemester || '');
   const fallbackTerm = normalizedSemester || selectedSemester || '';
   const transaction = new ImportTransaction(
@@ -190,7 +190,7 @@ export const previewImportChanges = async (csvData, importType, selectedSemester
         { fallbackTerm }
       );
     } else if (importType === 'directory') {
-      await previewDirectoryChanges(dedupedRows, transaction, existingPeopleData, existingRoomsData, { includeOfficeRooms });
+      await previewDirectoryChanges(dedupedRows, transaction, existingPeopleData, existingRoomsData);
     }
 
     const validationReport = validateImportTransaction(transaction, {
@@ -1519,11 +1519,10 @@ const previewScheduleChanges = async (
   transaction.previewSummary = summary;
 };
 
-const previewDirectoryChanges = async (csvData, transaction, existingPeople, existingRooms = [], options = {}) => {
+const previewDirectoryChanges = async (csvData, transaction, existingPeople, existingRooms = []) => {
   const pendingMatchMap = new Map();
   const roomsMap = new Map();
   const roomsKeyMap = new Map();
-  const { includeOfficeRooms = true } = options;
   const peopleIndex = buildPeopleIndex(existingPeople);
   const { peopleById, resolvePersonId } = peopleIndex;
   const { index: personIdentityIndex } = buildPersonIdentityIndex(existingPeople);
@@ -1655,7 +1654,7 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
     if (existingPerson) {
       const groupKey = `dir_${existingPerson.id}`;
 
-      if (includeOfficeRooms && officeSpaceKey && !existingOfficeRoom) {
+      if (officeSpaceKey && !existingOfficeRoom) {
         const now = new Date().toISOString();
         const newRoom = standardizeImportedRoom({
           spaceKey: officeSpaceKey,
@@ -1714,7 +1713,7 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
           candidates: matchResult?.candidates || []
         });
 
-        if (includeOfficeRooms && officeSpaceKey && !existingOfficeRoom && !roomsKeyMap.has(officeSpaceKey)) {
+        if (officeSpaceKey && !existingOfficeRoom && !roomsKeyMap.has(officeSpaceKey)) {
           const now = new Date().toISOString();
           const newRoom = standardizeImportedRoom({
             spaceKey: officeSpaceKey,
@@ -1767,7 +1766,7 @@ const previewDirectoryChanges = async (csvData, transaction, existingPeople, exi
             { groupKey: `dir_${matchKey}`, pendingResolution: true, matchIssueId: matchIssue.id }
           );
         }
-        if (includeOfficeRooms && officeSpaceKey && !existingOfficeRoom && !roomsKeyMap.has(officeSpaceKey)) {
+        if (officeSpaceKey && !existingOfficeRoom && !roomsKeyMap.has(officeSpaceKey)) {
           const groupKey = `dir_${matchKey}`;
           const now = new Date().toISOString();
           const newRoom = standardizeImportedRoom({
@@ -2752,7 +2751,6 @@ export const commitTransaction = async (
       });
       if (termChange?.action === 'add') {
         termDoc.status = 'active';
-        termDoc.locked = false;
         termDoc.createdAt = now;
         termChange.newData = termDoc;
       }

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ShieldAlert } from "lucide-react";
-import { useAuth } from "../../../contexts/AuthContext";
 import { useUI } from "../../../contexts/UIContext";
 import { useSchedules } from "../../../contexts/ScheduleContext";
 import ConfirmDialog from "../../shared/ConfirmDialog";
@@ -11,7 +10,6 @@ import RoutineWorkflowSection from "./RoutineWorkflowSection";
 import useDataCleanupActions from "./useDataCleanupActions";
 
 const DataCleanupRepairsPage = () => {
-  const { isAdmin } = useAuth();
   const { showNotification } = useUI();
   const { termOptions = [], selectedTermMeta } = useSchedules();
 
@@ -38,12 +36,12 @@ const DataCleanupRepairsPage = () => {
   ]);
 
   useEffect(() => {
-    if (!isAdmin || hasAutoScannedRef.current || actions.scanResult || actions.isScanning) {
+    if (hasAutoScannedRef.current || actions.scanResult || actions.isScanning) {
       return;
     }
     hasAutoScannedRef.current = true;
     actions.handleScan();
-  }, [actions, isAdmin]);
+  }, [actions]);
 
   const confirmConfig = useMemo(() => {
     if (confirmType === "baseline") {
@@ -136,20 +134,6 @@ const DataCleanupRepairsPage = () => {
     }
   };
 
-  if (!isAdmin) {
-    return (
-      <div className="mx-auto max-w-4xl p-6">
-        <div className="rounded-xl border border-red-200 bg-red-50 p-6">
-          <h1 className="text-xl font-semibold text-red-800">
-            Data Health Check
-          </h1>
-          <p className="mt-2 text-sm text-red-700">
-            Admin access is required to open these tools.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   const decisionCount = Math.max(
     0,

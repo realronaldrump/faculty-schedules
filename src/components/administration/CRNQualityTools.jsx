@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { usePermissions } from "../../utils/permissions";
 import { Database, AlertCircle, Save, Search, X } from "lucide-react";
 import { analyzeCRNCoverage } from "../../utils/crnMigrationUtils";
 import PageHeader from "../shared/PageHeader";
@@ -13,8 +12,6 @@ import { useSchedules } from "../../contexts/ScheduleContext";
 
 const CRNQualityTools = () => {
   const { showNotification } = useUI();
-  const { canEdit } = usePermissions();
-  const canEditHere = canEdit("admin-tools/crn-tools");
   const { selectedSemester, termOptions, getTermByLabel } = useSchedules();
   const [analysis, setAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -162,14 +159,6 @@ const CRNQualityTools = () => {
   };
 
   const handleCrnSave = async (row) => {
-    if (!canEditHere) {
-      showNotification?.(
-        "warning",
-        "Permission Denied",
-        "You do not have permission to modify CRNs.",
-      );
-      return;
-    }
     const newCrn = (editingCrn[row.id] ?? "").trim();
     if (!/^\d{5}$/.test(newCrn)) {
       showNotification?.(
@@ -388,14 +377,12 @@ const CRNQualityTools = () => {
                             <td className="table-cell text-gray-700 whitespace-nowrap">
                               {isEditing ? (
                                 <div className="flex items-center gap-2">
-                                  {canEditHere && (
-                                    <button
-                                      onClick={() => handleCrnSave(row)}
-                                      className="inline-flex items-center px-2 py-1 text-sm font-medium bg-baylor-green text-white rounded-md hover:bg-baylor-green/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                      Save
-                                    </button>
-                                  )}
+                                  <button
+                                    onClick={() => handleCrnSave(row)}
+                                    className="inline-flex items-center px-2 py-1 text-sm font-medium bg-baylor-green text-white rounded-md hover:bg-baylor-green/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    Save
+                                  </button>
                                   <button
                                     onClick={() => cancelCrnEdit(row.id)}
                                     className="inline-flex items-center px-2 py-1 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors"
@@ -405,14 +392,12 @@ const CRNQualityTools = () => {
                                 </div>
                               ) : (
                                 <>
-                                  {canEditHere && (
-                                    <button
-                                      onClick={() => cancelCrnEdit(row.id)}
-                                      className="inline-flex items-center px-2 py-1 text-xs bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
-                                    >
-                                      Cancel
-                                    </button>
-                                  )}
+                                  <button
+                                    onClick={() => cancelCrnEdit(row.id)}
+                                    className="inline-flex items-center px-2 py-1 text-xs bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
                                 </>
                               )}
                             </td>

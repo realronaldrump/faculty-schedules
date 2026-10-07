@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const loadPeopleMock = vi.fn();
 const showNotificationMock = vi.fn();
-const canEditMock = vi.fn();
 const updateDocMock = vi.fn();
 const docMock = vi.fn();
 const logUpdateMock = vi.fn();
@@ -71,12 +70,6 @@ vi.mock("../../../contexts/UIContext", () => ({
   }),
 }));
 
-vi.mock("../../../utils/permissions", () => ({
-  usePermissions: () => ({
-    canEdit: canEditMock,
-  }),
-}));
-
 import PAFWorkflow from "../PAFWorkflow";
 
 describe("PAFWorkflow", () => {
@@ -88,8 +81,6 @@ describe("PAFWorkflow", () => {
     peopleMock = defaultPeople;
     loadPeopleMock.mockReset();
     showNotificationMock.mockReset();
-    canEditMock.mockReset();
-    canEditMock.mockReturnValue(true);
     updateDocMock.mockReset();
     updateDocMock.mockResolvedValue(undefined);
     docMock.mockReset();

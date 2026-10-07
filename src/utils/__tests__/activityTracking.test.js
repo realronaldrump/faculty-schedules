@@ -29,7 +29,6 @@ const actor = {
   uid: "owner",
   email: "owner@example.com",
   displayName: "Owner",
-  role: "admin",
 };
 
 const getDailySummaryWrite = () =>

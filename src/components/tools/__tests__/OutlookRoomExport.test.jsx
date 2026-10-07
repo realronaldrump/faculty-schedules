@@ -25,10 +25,6 @@ vi.mock("../../../contexts/AppConfigContext", () => ({
   useAppConfig: () => ({ termConfig: undefined, termConfigVersion: 1 }),
 }));
 
-vi.mock("../../../contexts/AuthContext", () => ({
-  useAuth: () => ({ canAccess: () => true }),
-}));
-
 vi.mock("../../../firebase", () => ({
   db: {},
   COLLECTIONS: { OUTLOOK_EXCEPTIONS: "outlookExceptions" },

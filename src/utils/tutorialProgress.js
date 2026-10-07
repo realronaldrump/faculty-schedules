@@ -28,7 +28,6 @@ const buildIdentity = (actor) => ({
   uid: actor.uid,
   email: actor.email || "",
   displayName: actor.displayName || "",
-  role: actor.role || "unknown",
 });
 
 /**

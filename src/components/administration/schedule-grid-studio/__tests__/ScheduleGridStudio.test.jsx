@@ -47,7 +47,6 @@ describe("ScheduleGridStudio", () => {
     render(
       <ScheduleGridStudio
         initialDocument={createBlankStudioDocument()}
-        canSave
         onSaveTemplate={onSaveTemplate}
         onBack={vi.fn()}
       />,

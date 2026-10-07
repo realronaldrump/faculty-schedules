@@ -53,7 +53,6 @@ const buildTermDoc = ({ term, termCode, startDate, endDate, includeDefaults = fa
 
   if (includeDefaults) {
     docData.status = 'active';
-    docData.locked = false;
     docData.createdAt = now;
   }
 
@@ -70,11 +69,7 @@ export const fetchTermOptions = async ({ includeArchived = false } = {}) => {
     };
     const normalizedRecord = normalizeTermRecord(record);
     const status = normalizedRecord.status || (record.archived ? 'archived' : 'active');
-    return {
-      ...normalizedRecord,
-      status,
-      locked: normalizedRecord.locked === true || status === 'archived'
-    };
+    return { ...normalizedRecord, status };
   });
   if (normalized.length === 0) {
     if (cachedFallbackTerms) {
@@ -96,11 +91,7 @@ export const fetchTermOptions = async ({ includeArchived = false } = {}) => {
       });
       normalized = Array.from(termMap.values()).map((term) => {
         const record = normalizeTermRecord(term);
-        return {
-          ...record,
-          status: 'active',
-          locked: record.locked === true
-        };
+        return { ...record, status: 'active' };
       });
       cachedFallbackTerms = normalized;
     }

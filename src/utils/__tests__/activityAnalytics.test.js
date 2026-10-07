@@ -14,10 +14,6 @@ describe("activity analytics aggregation", () => {
       pageEnterCount: 8,
       semanticEventCount: 10,
       totalMinutesApprox: 44,
-      roleBreakdown: {
-        admin: { uniqueUsers: 1, sessionCount: 1, pageEnterCount: 4, semanticEventCount: 5, totalMinutesApprox: 24 },
-        staff: { uniqueUsers: 1, sessionCount: 2, pageEnterCount: 4, semanticEventCount: 5, totalMinutesApprox: 20 },
-      },
       hourlyBuckets: Array.from({ length: 24 }, (_, hour) => ({
         hour,
         pageEnterCount: hour === 9 ? 4 : 0,
@@ -43,9 +39,6 @@ describe("activity analytics aggregation", () => {
       pageEnterCount: 3,
       semanticEventCount: 4,
       totalMinutesApprox: 15,
-      roleBreakdown: {
-        staff: { uniqueUsers: 1, sessionCount: 1, pageEnterCount: 3, semanticEventCount: 4, totalMinutesApprox: 15 },
-      },
       hourlyBuckets: Array.from({ length: 24 }, (_, hour) => ({
         hour,
         pageEnterCount: hour === 10 ? 3 : 0,
@@ -85,7 +78,6 @@ describe("activity analytics aggregation", () => {
       uid: "owner",
       email: "owner@example.com",
       displayName: "Owner",
-      role: "admin",
       sessionCount: 1,
       totalMinutesApprox: 24,
       pagesVisitedCount: 3,
@@ -104,7 +96,6 @@ describe("activity analytics aggregation", () => {
       uid: "staffer",
       email: "staff@example.com",
       displayName: "Staff User",
-      role: "staff",
       sessionCount: 2,
       totalMinutesApprox: 20,
       pagesVisitedCount: 4,
@@ -123,7 +114,6 @@ describe("activity analytics aggregation", () => {
       uid: "staffer",
       email: "staff@example.com",
       displayName: "Staff User",
-      role: "staff",
       sessionCount: 1,
       totalMinutesApprox: 15,
       pagesVisitedCount: 2,
@@ -186,7 +176,6 @@ describe("activity analytics aggregation", () => {
       uid: "owner",
       email: "owner@example.com",
       displayName: "Owner",
-      role: "admin",
       sessionCount: 2,
       totalMinutesApprox: 30,
       pagesVisitedCount: 2,

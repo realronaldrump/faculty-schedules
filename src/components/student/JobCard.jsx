@@ -14,7 +14,12 @@ import VisualScheduleBuilder from "./VisualScheduleBuilder";
 import BuildingSelector from "./BuildingSelector";
 import SuggestionInput from "./SuggestionInput";
 import SupervisorSelect from "./SupervisorSelect";
-import { parseStudentWorkerDate } from "../../utils/studentWorkers";
+import {
+  calculateWeeklyHoursFromSchedule,
+  isStudentJobEnded,
+  parseHourlyRate,
+  parseStudentWorkerDate,
+} from "../../utils/studentWorkers";
 import { getStudentJobError } from "../../utils/studentJobDrafts";
 
 /**
@@ -75,18 +80,8 @@ const JobCard = ({
     return job?.supervisor || "";
   }, [job, supervisorOptions]);
 
-  // Calculate weekly hours
-  const weeklyHours = (job?.weeklySchedule || []).reduce((sum, entry) => {
-    const start =
-      parseInt(entry.start.split(":")[0]) +
-      parseInt(entry.start.split(":")[1] || 0) / 60;
-    const end =
-      parseInt(entry.end.split(":")[0]) +
-      parseInt(entry.end.split(":")[1] || 0) / 60;
-    return sum + (end - start);
-  }, 0);
-
-  const weeklyPay = weeklyHours * (parseFloat(job?.hourlyRate) || 0);
+  const weeklyHours = calculateWeeklyHoursFromSchedule(job?.weeklySchedule);
+  const weeklyPay = weeklyHours * parseHourlyRate(job?.hourlyRate);
 
   // Format time
   const formatTime = (timeStr) => {
@@ -117,17 +112,15 @@ const JobCard = ({
   };
 
   const formattedSchedule = formatSchedule(job?.weeklySchedule);
-  const { startDateLabel, endDateLabel, endOfDay } = useMemo(() => {
+  const { startDateLabel, endDateLabel } = useMemo(() => {
     const start = parseStudentWorkerDate(job?.startDate);
     const end = parseStudentWorkerDate(job?.endDate);
-    const endOfDay = parseStudentWorkerDate(job?.endDate, { endOfDay: true });
     return {
       startDateLabel: start ? start.toLocaleDateString() : "",
       endDateLabel: end ? end.toLocaleDateString() : "",
-      endOfDay,
     };
   }, [job?.startDate, job?.endDate]);
-  const isEnded = Boolean(endOfDay && new Date() > endOfDay);
+  const isEnded = isStudentJobEnded(job);
 
   // Handle edit mode
   if (isEditing) {

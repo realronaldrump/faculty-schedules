@@ -85,10 +85,6 @@ vi.mock("react-router-dom", async (importOriginal) => {
   };
 });
 
-vi.mock("../../../contexts/AuthContext", () => ({
-  useAuth: () => ({ isAdmin: true }),
-}));
-
 vi.mock("../../../contexts/UIContext", () => ({
   useUI: () => ({ showNotification: showNotificationMock }),
 }));

@@ -105,16 +105,6 @@ const usePeopleOperations = () => {
     rawPrograms,
     loadPrograms,
     spacesByKey,
-    canEdit,
-    canEditFaculty,
-    canCreateFaculty,
-    canDeleteFaculty,
-    canEditStaff,
-    canCreateStaff,
-    canEditStudent,
-    canCreateStudent,
-    canDeleteStudent,
-    canCreateProgram,
   } = useData();
   const { loadPeople } = usePeople();
 
@@ -287,19 +277,6 @@ const usePeopleOperations = () => {
   const handleFacultyUpdate = useCallback(
     async (facultyToUpdate, originalData = null) => {
       const isNewFaculty = !facultyToUpdate.id;
-      const requiredPermission = isNewFaculty
-        ? canCreateFaculty()
-        : canEditFaculty();
-
-      if (!requiredPermission) {
-        const actionName = isNewFaculty ? "create" : "modify";
-        showNotification(
-          "warning",
-          "Permission Denied",
-          `You don't have permission to ${actionName} faculty members.`,
-        );
-        return;
-      }
 
       console.log("👤 Updating faculty member:", facultyToUpdate);
 
@@ -440,8 +417,6 @@ const usePeopleOperations = () => {
     },
     [
       loadPeople,
-      canCreateFaculty,
-      canEditFaculty,
       showNotification,
       normalizeOfficeSpaceIds,
       resolveSpaceLabel,
@@ -452,15 +427,6 @@ const usePeopleOperations = () => {
   // Handle faculty delete
   const handleFacultyDelete = useCallback(
     async (facultyToDelete) => {
-      if (!canDeleteFaculty()) {
-        showNotification(
-          "warning",
-          "Permission Denied",
-          "You don't have permission to delete faculty members.",
-        );
-        return;
-      }
-
       console.log("🗑️ Deleting faculty member:", facultyToDelete);
 
       try {
@@ -489,25 +455,12 @@ const usePeopleOperations = () => {
         showNotification("error", "Delete Failed", message);
       }
     },
-    [loadPeople, canDeleteFaculty, showNotification],
+    [loadPeople, showNotification],
   );
 
   // Handle staff update/create
   const handleStaffUpdate = useCallback(
     async (staffToUpdate) => {
-      const isNewStaff = !staffToUpdate.id;
-      const requiredPermission = isNewStaff ? canCreateStaff() : canEditStaff();
-
-      if (!requiredPermission) {
-        const actionName = isNewStaff ? "create" : "modify";
-        showNotification(
-          "warning",
-          "Permission Denied",
-          `You don't have permission to ${actionName} staff members.`,
-        );
-        return;
-      }
-
       console.log("👥 Updating staff member:", staffToUpdate);
 
       try {
@@ -629,8 +582,6 @@ const usePeopleOperations = () => {
     [
       rawPeople,
       loadPeople,
-      canCreateStaff,
-      canEditStaff,
       showNotification,
       normalizeOfficeSpaceIds,
       resolveSpaceLabel,
@@ -640,15 +591,6 @@ const usePeopleOperations = () => {
   // Handle staff delete
   const handleStaffDelete = useCallback(
     async (staffToDelete) => {
-      if (!canEdit()) {
-        showNotification(
-          "warning",
-          "Permission Denied",
-          "Only admins can delete staff.",
-        );
-        return;
-      }
-
       console.log("🗑️ Deleting staff member:", staffToDelete);
 
       try {
@@ -676,26 +618,13 @@ const usePeopleOperations = () => {
         showNotification("error", "Delete Failed", message);
       }
     },
-    [loadPeople, canEdit, showNotification],
+    [loadPeople, showNotification],
   );
 
   // Handle student update/create
   const handleStudentUpdate = useCallback(
     async (studentToUpdate, { semesterKey = null } = {}) => {
       const isNewStudent = !studentToUpdate.id;
-      const requiredPermission = isNewStudent
-        ? canCreateStudent()
-        : canEditStudent();
-
-      if (!requiredPermission) {
-        const actionName = isNewStudent ? "create" : "modify";
-        showNotification(
-          "warning",
-          "Permission Denied",
-          `You don't have permission to ${actionName} student workers.`,
-        );
-        throw Object.assign(new Error(`You don't have permission to ${actionName} student workers.`), { code: "permission-denied" });
-      }
 
       console.log("🎓 Updating student worker:", studentToUpdate);
 
@@ -842,8 +771,8 @@ const usePeopleOperations = () => {
         if (isPermission) {
           showNotification(
             "warning",
-            "Permission Denied",
-            "Your account is not permitted to perform this action.",
+            "Save Refused",
+            "Your sign-in has expired or your account was disabled. Sign out and back in, then try again.",
           );
         } else {
           const friendly =
@@ -862,8 +791,6 @@ const usePeopleOperations = () => {
     [
       rawPeople,
       loadPeople,
-      canCreateStudent,
-      canEditStudent,
       showNotification,
       normalizeStudentSchedules,
       stripLegacyStudentMirrors,
@@ -873,15 +800,6 @@ const usePeopleOperations = () => {
   // Handle student delete
   const handleStudentDelete = useCallback(
     async (studentToDelete) => {
-      if (!canDeleteStudent()) {
-        showNotification(
-          "warning",
-          "Permission Denied",
-          "You don't have permission to delete student workers.",
-        );
-        throw Object.assign(new Error("You don't have permission to delete student workers."), { code: "permission-denied" });
-      }
-
       console.log("🗑️ Deleting student worker:", studentToDelete);
 
       try {
@@ -923,20 +841,12 @@ const usePeopleOperations = () => {
         throw error;
       }
     },
-    [rawPeople, loadPeople, canDeleteStudent, showNotification],
+    [rawPeople, loadPeople, showNotification],
   );
 
   // Handle program create
   const handleProgramCreate = useCallback(
     async (programInput = {}) => {
-      if (!canCreateProgram()) {
-        showNotification(
-          "warning",
-          "Permission Denied",
-          "You do not have permission to create programs.",
-        );
-        return null;
-      }
 
       const normalizedName = normalizeProgramName(programInput.name);
       if (!normalizedName) {
@@ -1010,20 +920,12 @@ const usePeopleOperations = () => {
         return null;
       }
     },
-    [rawPrograms, loadPrograms, canCreateProgram, showNotification],
+    [rawPrograms, loadPrograms, showNotification],
   );
 
   // Handle program update (including rename)
   const handleProgramUpdate = useCallback(
     async (programToUpdate, newName, newCode = undefined) => {
-      if (!canCreateProgram()) {
-        showNotification(
-          "warning",
-          "Permission Denied",
-          "You do not have permission to edit programs.",
-        );
-        return null;
-      }
 
       const normalizedName = normalizeProgramName(newName);
       if (!normalizedName) {
@@ -1121,7 +1023,7 @@ const usePeopleOperations = () => {
         return null;
       }
     },
-    [rawPrograms, loadPrograms, canCreateProgram, showNotification],
+    [rawPrograms, loadPrograms, showNotification],
   );
 
   /**
@@ -1131,14 +1033,6 @@ const usePeopleOperations = () => {
    */
   const handleDirectorAssignmentChange = useCallback(
     async ({ programId, personId, role, assign }) => {
-      if (!canEdit("people/programs")) {
-        showNotification(
-          "warning",
-          "Permission Denied",
-          "You do not have permission to manage program directors.",
-        );
-        return false;
-      }
 
       const roleLabel = getDirectorRoleLabel(role) || "program director";
       const program = (rawPrograms || []).find((p) => p.id === programId);
@@ -1232,7 +1126,7 @@ const usePeopleOperations = () => {
         return false;
       }
     },
-    [rawPrograms, rawPeople, loadPrograms, canEdit, showNotification],
+    [rawPrograms, rawPeople, loadPrograms, showNotification],
   );
 
   // Handle revert change (placeholder)

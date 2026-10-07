@@ -13,10 +13,7 @@ import UniversalDirectory from "../shared/UniversalDirectory";
 import FacultyContactCard from "../FacultyContactCard";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import { usePeople } from "../../contexts/PeopleContext";
-import { useAuth } from "../../contexts/AuthContext";
 import { usePeopleOperations } from "../../hooks";
-import { useUI } from "../../contexts/UIContext";
-import { usePermissions } from "../../utils/permissions";
 import { hasRole } from "../../utils/peopleUtils";
 import { downloadCSVFile } from "../../utils/csvUtils";
 
@@ -38,10 +35,6 @@ const getPersonType = (person) => {
 const BaylorIDManager = ({ embedded = false }) => {
   const { people: directoryData, loadPeople } = usePeople();
   const { handleBaylorIdUpdate } = usePeopleOperations();
-  const { showNotification } = useUI();
-  const { canEdit } = usePermissions();
-  const { isAdmin } = useAuth();
-  const canEditIds = isAdmin && canEdit("people/baylor-id-manager");
   const [filterText, setFilterText] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [roleChecks, setRoleChecks] = useState({
@@ -164,14 +157,6 @@ const BaylorIDManager = ({ embedded = false }) => {
       setError(validation);
       return;
     }
-    if (!canEditIds) {
-      showNotification?.(
-        "warning",
-        "Permission Denied",
-        "You do not have permission to modify Baylor IDs.",
-      );
-      return;
-    }
     const cleanedId = baylorIdDraft.replace(/\D/g, "");
     const shouldRemove = !cleanedId && Boolean(getBaylorId(person));
     try {
@@ -188,23 +173,13 @@ const BaylorIDManager = ({ embedded = false }) => {
     }
   }, [
     baylorIdDraft,
-    canEditIds,
     getBaylorId,
     handleBaylorIdUpdate,
-    showNotification,
     validateId,
   ]);
 
   const confirmRemoveId = async () => {
     if (!removeTarget) return;
-    if (!canEditIds) {
-      showNotification?.(
-        "warning",
-        "Permission Denied",
-        "You do not have permission to remove Baylor IDs.",
-      );
-      return;
-    }
 
     try {
       setIsRemoving(true);
@@ -334,7 +309,6 @@ const BaylorIDManager = ({ embedded = false }) => {
   // Actions column renderer
   const renderActions = useCallback(
     (person) => {
-      if (!canEditIds) return null;
       const isEditing = editingId === person.id;
       if (isEditing) {
         return (
@@ -378,7 +352,7 @@ const BaylorIDManager = ({ embedded = false }) => {
         </div>
       );
     },
-    [canEditIds, cancelEdit, editingId, getBaylorId, saveId, startEdit],
+    [cancelEdit, editingId, getBaylorId, saveId, startEdit],
   );
 
   // Filter content for the collapsible panel

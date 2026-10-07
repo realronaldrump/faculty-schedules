@@ -105,7 +105,7 @@ const useEmailListPresets = () => {
     }, [user]);
 
     /**
-     * Delete a preset (caller should verify admin permissions)
+     * Delete a preset
      * @param {string} presetId - ID of the preset to delete
      */
     const deletePreset = useCallback(async (presetId) => {

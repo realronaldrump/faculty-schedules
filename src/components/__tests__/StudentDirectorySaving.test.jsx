@@ -51,7 +51,6 @@ vi.mock("../../contexts/DataContext", async () => {
       rawPeople: store.rows, rawPrograms: [], directorIndex: new Map(), peopleIndex: buildPeopleIndex(store.rows),
       studentData: store.rows.map((student) => applySemesterSchedule(student, "Fall 2026")),
       selectedSemester: "Fall 2026", selectedSemesterMeta: { startDate: "2026-08-01", endDate: "2026-12-31" },
-      canCreateStudent: () => true, canEditStudent: () => true, canDeleteStudent: () => true,
     };
   } };
 });

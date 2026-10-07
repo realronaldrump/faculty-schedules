@@ -8,13 +8,11 @@ const TAB_DEFINITIONS = [
   {
     id: "schedule",
     label: "Schedules",
-    accessId: "scheduling/student-workers",
     component: StudentSchedules,
   },
   {
     id: "payroll",
     label: "Payroll",
-    accessId: "scheduling/student-workers",
     component: StudentWorkerAnalytics,
   },
 ];
@@ -22,14 +20,14 @@ const TAB_DEFINITIONS = [
 const CANONICAL_PATH = "/scheduling/student-workers";
 
 const StudentWorkersHub = ({ initialTab }) => {
-  const { availableTabs, activeTab, handleTabChange } = useHubTabs({
+  const { activeTab, handleTabChange } = useHubTabs({
     tabs: TAB_DEFINITIONS,
     initialTab,
     strategy: "query",
     canonicalPath: CANONICAL_PATH,
   });
 
-  const activeTabConfig = availableTabs.find((tab) => tab.id === activeTab);
+  const activeTabConfig = TAB_DEFINITIONS.find((tab) => tab.id === activeTab);
   const ActiveComponent = activeTabConfig?.component;
 
   return (
@@ -41,18 +39,12 @@ const StudentWorkersHub = ({ initialTab }) => {
       />
 
       <HubTabs
-        tabs={availableTabs}
+        tabs={TAB_DEFINITIONS}
         activeTab={activeTab}
         onChange={handleTabChange}
       />
 
-      {ActiveComponent ? (
-        <ActiveComponent embedded />
-      ) : (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 text-sm text-gray-600">
-          You do not have access to any student worker views.
-        </div>
-      )}
+      <ActiveComponent embedded />
     </div>
   );
 };

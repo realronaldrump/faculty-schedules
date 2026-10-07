@@ -292,11 +292,22 @@ const InstructionCard = ({
   );
 };
 
+// Latest earlier step the user can pick up from right now: one with no target
+// or whose target is on the page (e.g. "Click Add Student" once the wizard a
+// later step needs has been closed, refreshed away, or skipped by Resume).
+const findReachableStepIndex = (steps, beforeIndex) => {
+  for (let index = beforeIndex - 1; index >= 0; index -= 1) {
+    const { target } = steps[index];
+    if (!target || document.querySelector(target)) return index;
+  }
+  return -1;
+};
+
 // Non-blocking notice shown when a step's target element can't be found on the
-// current page (e.g. the user navigated away mid-tutorial). Unlike the spotlight
-// overlay, this does NOT dim or block the page — it leaves the app fully usable
-// while we navigate back to the tutorial's page, and always offers an exit.
-const TargetMissingNotice = ({ onTutorialPage, onReturn, onExit }) => (
+// current page (e.g. the user navigated away mid-tutorial, or the window the
+// step needs was closed). Unlike the spotlight overlay, this does NOT dim or
+// block the page; it offers a way back to a reachable step and always an exit.
+const TargetMissingNotice = ({ onTutorialPage, stepNumber, totalSteps, backStep, onBack, onReturn, onExit }) => (
   <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[9999] w-96 max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-2xl overflow-hidden border border-gray-200">
     <div className="bg-baylor-green px-4 py-3 flex items-center gap-2 text-white">
       {onTutorialPage ? (
@@ -305,14 +316,26 @@ const TargetMissingNotice = ({ onTutorialPage, onReturn, onExit }) => (
         <Loader2 className="w-5 h-5 text-baylor-gold animate-spin" />
       )}
       <span className="font-semibold">Tutorial paused</span>
+      <span className="ml-auto text-sm text-white/80">Step {stepNumber} of {totalSteps}</span>
     </div>
     <div className="p-5">
       <p className="text-gray-600 mb-4">
         {onTutorialPage
-          ? "We can't find this step on the page yet. It may still be loading. You can keep waiting or exit the tutorial."
+          ? backStep
+            ? `This step needs part of the page that isn't open right now, such as a window that was closed. Go back to step ${backStep.number} ("${backStep.title}") to pick up from there.`
+            : "We can't find this step on the page. If the page is still loading, the tutorial will continue on its own."
           : "You've left the tutorial page. Taking you back to where you left off…"}
       </p>
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {onTutorialPage && backStep && (
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1 px-4 py-1.5 text-sm rounded-lg bg-baylor-green text-white hover:bg-baylor-green/90 transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Back to step {backStep.number}
+          </button>
+        )}
         {!onTutorialPage && (
           <button
             onClick={onReturn}
@@ -341,6 +364,7 @@ const TutorialOverlay = () => {
     isPaused,
     nextStep,
     prevStep,
+    goToStep,
     endTutorial,
     actionCompleted,
     markActionCompleted,
@@ -608,10 +632,21 @@ const TutorialOverlay = () => {
     const onTutorialPage = targetPathname
       ? location.pathname === targetPathname
       : false;
+    const backIndex = onTutorialPage
+      ? findReachableStepIndex(activeTutorial.steps, currentStepIndex)
+      : -1;
 
     return (
       <TargetMissingNotice
         onTutorialPage={onTutorialPage}
+        stepNumber={currentStepIndex + 1}
+        totalSteps={activeTutorial.steps.length}
+        backStep={
+          backIndex >= 0
+            ? { number: backIndex + 1, title: activeTutorial.steps[backIndex].title }
+            : null
+        }
+        onBack={() => goToStep(backIndex)}
         onReturn={() => targetPage && navigate(`/${targetPage}`)}
         onExit={() => endTutorial(false)}
       />

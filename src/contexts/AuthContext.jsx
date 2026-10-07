@@ -23,14 +23,7 @@ import {
   serverTimestamp,
   onSnapshot,
 } from "firebase/firestore";
-import { logCreate } from "../utils/changeLogger";
-import {
-  getAllRegisteredPageIds,
-  getRegisteredPageMeta,
-  getRegisteredNavigationEntries,
-} from "../utils/pageRegistry";
-import { USER_STATUS, normalizeRolePermissions, resolveUserStatus, isUserAdmin, isUserActive, isUserPending, isUserDisabled, canAccessPage } from "../utils/authz";
-import { isActivityOwnerUid, isOwnerOnlyPageId } from "../utils/activityOwner";
+import { isOwnerUid } from "../utils/owner";
 
 const AuthContext = createContext(null);
 
@@ -78,16 +71,8 @@ const readOwnProfileWhenAuthReady = async (
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
-  const [rolePermissions, setRolePermissions] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [loadedProfile, setLoadedProfile] = useState(false);
-  const [loadedAccess, setLoadedAccess] = useState(false);
   const activityTrackerRef = useRef(null);
-  const userProfileIsAdmin = isUserAdmin(userProfile);
-
-  // Removed insecure .env based admin check. Admin access is now strictly role-based.
-
-  const getAccessControlRef = () => doc(db, "settings", "accessControl");
 
   const loadUserProfile = async (firebaseUser) => {
     if (!firebaseUser) {
@@ -104,23 +89,14 @@ export const AuthProvider = ({ children }) => {
           firebaseUser.displayName ||
           firebaseUser.email?.split("@")[0] ||
           "User",
-        roles: [],
-        status: USER_STATUS.PENDING,
+        status: "pending",
         disabled: false,
-        permissions: {},
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         lastLoginAt: serverTimestamp(),
         lastActiveAt: serverTimestamp(),
       };
       await setDoc(userRef, newProfile);
-      logCreate(
-        `User - ${newProfile.email}`,
-        "users",
-        firebaseUser.uid,
-        newProfile,
-        "AuthContext.jsx - loadUserProfile:create",
-      ).catch(() => {});
       setUserProfile({
         ...newProfile,
         createdAt: new Date().toISOString(),
@@ -234,7 +210,6 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    setLoading(true);
     let stopUserProfile = null;
     const unsub = onAuthStateChanged(auth, async (u) => {
       // Clean up any existing profile subscription before handling new user
@@ -249,7 +224,6 @@ export const AuthProvider = ({ children }) => {
 
       setUser(u);
       setLoadedProfile(false);
-      setLoadedAccess(false);
       // Ensure user profile document exists and update lastLoginAt
       try {
         if (u) {
@@ -275,9 +249,7 @@ export const AuthProvider = ({ children }) => {
         );
       } else {
         setUserProfile(null);
-        setRolePermissions(normalizeRolePermissions());
         setLoadedProfile(true);
-        setLoadedAccess(true);
         stopUserActivityTracking();
       }
     });
@@ -297,65 +269,6 @@ export const AuthProvider = ({ children }) => {
       }
     };
   }, []);
-
-  // Subscribe to Access Control changes
-  useEffect(() => {
-    if (!user?.uid) {
-      setRolePermissions(normalizeRolePermissions());
-      setLoadedAccess(true);
-      return undefined;
-    }
-
-    if (!loadedProfile) {
-      setLoadedAccess(false);
-      return undefined;
-    }
-
-    setLoadedAccess(false);
-    const ref = getAccessControlRef();
-    const stop = onSnapshot(
-      ref,
-      (snap) => {
-        if (snap.exists()) {
-          const data = snap.data() || {};
-          setRolePermissions(normalizeRolePermissions(data.rolePermissions));
-        } else {
-          const defaults = {
-            rolePermissions: normalizeRolePermissions(),
-            updatedAt: serverTimestamp(),
-          };
-          setRolePermissions(defaults.rolePermissions);
-          if (userProfileIsAdmin) {
-            setDoc(ref, defaults, { merge: true })
-              .then(() =>
-                logCreate(
-                  "Access Control Defaults",
-                  "settings",
-                  "accessControl",
-                  defaults,
-                  "AuthContext.jsx - accessControlListener",
-                ),
-              )
-              .catch((error) => {
-                console.warn("Failed to seed access control defaults.", error);
-              });
-          }
-        }
-        setLoadedAccess(true);
-      },
-      (error) => {
-        console.warn("Access control snapshot failed, using profile-based fallback.", error);
-        // Only grant wildcard access to the actual admin role — not to everyone.
-        setRolePermissions(normalizeRolePermissions());
-        setLoadedAccess(true);
-      },
-    );
-    return () => stop();
-  }, [user?.uid, loadedProfile, userProfileIsAdmin]);
-
-  useEffect(() => {
-    setLoading(!(loadedProfile && loadedAccess));
-  }, [loadedProfile, loadedAccess]);
 
   const signIn = useCallback(async (email, password) => {
     const cred = await signInWithEmailAndPassword(auth, email, password);
@@ -381,72 +294,23 @@ export const AuthProvider = ({ children }) => {
     await firebaseSignOut(auth);
   }, []);
 
-  const userUid = user?.uid;
-
-  const getAllPageIds = useCallback(() => {
-    const isOwner = isActivityOwnerUid(userUid);
-    const fromMeta = getRegisteredPageMeta();
-    if (Array.isArray(fromMeta) && fromMeta.length > 0) {
-      return fromMeta
-        .filter((entry) => !entry?.ownerOnly || isOwner)
-        .map((entry) => entry.id);
-    }
-
-    const fromRegistry = getAllRegisteredPageIds();
-    if (!Array.isArray(fromRegistry)) return [];
-    return fromRegistry.filter((pageId) =>
-      isOwner ? true : !isOwnerOnlyPageId(pageId),
-    );
-  }, [userUid]);
-
-  const getAllNavigationEntries = useCallback(() => {
-    const fromRegistry = getRegisteredNavigationEntries();
-    if (!Array.isArray(fromRegistry)) return [];
-    const isOwner = isActivityOwnerUid(userUid);
-    return fromRegistry.filter((entry) => !entry?.ownerOnly || isOwner);
-  }, [userUid]);
-
-  const canAccess = useCallback(
-    (pageId) => {
-      if (!isActivityOwnerUid(userUid) && isOwnerOnlyPageId(pageId)) {
-        return false;
-      }
-      return canAccessPage({ userProfile, rolePermissions, pageId });
-    },
-    [userUid, userProfile, rolePermissions],
-  );
+  const isOwner = isOwnerUid(user?.uid);
+  const isApproved =
+    isOwner ||
+    (userProfile?.status === "active" && userProfile?.disabled !== true);
 
   const value = useMemo(
     () => ({
       user,
       userProfile,
-      rolePermissions,
-      loading,
+      loading: !loadedProfile,
       signIn,
       signUp,
       signOut,
-      canAccess,
-      getAllPageIds,
-      getAllNavigationEntries,
-      userStatus: resolveUserStatus(userProfile),
-      isPending: isUserPending(userProfile),
-      isActive: isUserActive(userProfile),
-      isDisabled: isUserDisabled(userProfile),
-      isAdmin: isUserAdmin(userProfile),
-      isActivityOwner: isActivityOwnerUid(user?.uid),
+      isOwner,
+      isApproved,
     }),
-    [
-      user,
-      userProfile,
-      rolePermissions,
-      loading,
-      signIn,
-      signUp,
-      signOut,
-      canAccess,
-      getAllPageIds,
-      getAllNavigationEntries,
-    ],
+    [user, userProfile, loadedProfile, signIn, signUp, signOut, isOwner, isApproved],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

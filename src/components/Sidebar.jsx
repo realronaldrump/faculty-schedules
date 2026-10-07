@@ -9,9 +9,6 @@ const normalizeNavigationPath = (path = "") =>
 const getPathnamePart = (path = "") =>
   normalizeNavigationPath(path).split("?")[0];
 
-const getNavigationAccessId = (item) =>
-  item?.accessId || getPathnamePart(item?.path) || item?.id;
-
 const getSidebarChildren = (item) =>
   Array.isArray(item?.sidebarChildren) ? item.sidebarChildren : [];
 
@@ -44,7 +41,7 @@ const Sidebar = ({
   togglePinPage,
 }) => {
   const [expandedSections, setExpandedSections] = useState([]); // Default expanded sections
-  const { canAccess, userProfile, isAdmin, isActivityOwner } = useAuth();
+  const { isOwner } = useAuth();
   const location = useLocation();
   const currentTarget = `${currentPage}${location.search || ""}`;
 
@@ -101,26 +98,7 @@ const Sidebar = ({
     return null;
   };
 
-  const normalizeRoles = (roles) => {
-    if (Array.isArray(roles)) return roles.filter(Boolean);
-    if (roles && typeof roles === "object") {
-      return Object.keys(roles).filter((key) => roles[key]);
-    }
-    if (typeof roles === "string" && roles.trim()) return [roles.trim()];
-    return [];
-  };
-
-  const userRoles = normalizeRoles(userProfile?.roles);
-  const shouldHideForRole = (item) => {
-    // Hide adminOnly items from non-admins
-    if (item?.adminOnly && !isAdmin) return true;
-    if (item?.ownerOnly && !isActivityOwner) return true;
-    if (item?.hidden) return true;
-    const hiddenRoles = item?.permissions?.hideFromRoles;
-    if (!hiddenRoles || hiddenRoles.length === 0) return false;
-    if (userRoles.length === 0) return false;
-    return userRoles.some((role) => hiddenRoles.includes(role));
-  };
+  const isHidden = (item) => item?.hidden || (item?.ownerOnly && !isOwner);
 
   const isActive = (path) => pathIsActive(path, currentPage);
 
@@ -189,9 +167,7 @@ const Sidebar = ({
               {pinnedPages.map((pageId) => {
                 const item = findNavItem(pageId);
                 if (!item) return null;
-                const pinAccessId = getNavigationAccessId(item);
-                if (!canAccess(pinAccessId) || shouldHideForRole(item))
-                  return null;
+                if (isHidden(item)) return null;
                 const Icon = item.icon || User;
                 return (
                   <button
@@ -218,16 +194,11 @@ const Sidebar = ({
             const isExpanded = expandedSections.includes(item.id);
             const itemIsActive = isActive(item.path || item.id);
             const visibleChildren = hasChildren
-              ? (item.children || []).filter(
-                  (child) =>
-                    canAccess(getNavigationAccessId(child)) &&
-                    !shouldHideForRole(child),
-                )
+              ? item.children.filter((child) => !isHidden(child))
               : [];
             const sectionAllowed = hasChildren
               ? visibleChildren.length > 0
-              : canAccess(getNavigationAccessId(item)) &&
-                !shouldHideForRole(item);
+              : !isHidden(item);
 
             if (!sectionAllowed) {
               return null;
@@ -285,11 +256,7 @@ const Sidebar = ({
                       const isPinned = pinnedPages.includes(child.id);
                       const visibleSidebarChildren = getSidebarChildren(
                         child,
-                      ).filter(
-                        (sidebarChild) =>
-                          canAccess(getNavigationAccessId(sidebarChild)) &&
-                          !shouldHideForRole(sidebarChild),
-                      );
+                      ).filter((sidebarChild) => !isHidden(sidebarChild));
                       const hasSidebarChildren =
                         visibleSidebarChildren.length > 0;
                       const sidebarChildExpanded = expandedSections.includes(

@@ -24,7 +24,6 @@ import { normalizeTermLabel, termCodeFromLabel } from '../../utils/termUtils';
 import { buildCSVContent, downloadTextFile } from '../../utils/csvUtils';
 
 import SelectDropdown from "../SelectDropdown";
-const canUseWindow = typeof window !== 'undefined';
 
 const triggerCSVDownload = (csvContent, filename) => {
   downloadTextFile(csvContent, filename, 'text/csv;charset=utf-8;');
@@ -620,11 +619,6 @@ const facultyDirectoryConfig = {
   },
   getSortPriority: (person, extraState) =>
     (extraState.pinDirectorsFirst ? ((person.directorAssignments || []).length > 0 ? 1 : 0) : 0),
-  permissions: {
-    canEdit: () => !canUseWindow || window?.appPermissions?.canEditFaculty !== false,
-    canDelete: () => !canUseWindow || window?.appPermissions?.canDeleteFaculty !== false,
-    canCreate: () => !canUseWindow || window?.appPermissions?.canAddFaculty !== false
-  },
   enableCreate: true,
   emptyMessage: 'No faculty members found.',
   getColumns: ({ baseColumns, renderStatusToggles, editFormData, newRecord, handleChange, handleCreateChange, setEditFormData, setNewRecord, errors }) => {
@@ -781,7 +775,6 @@ const facultyDirectoryConfig = {
         <button
           onClick={handlers.handleCreate}
           className="btn-primary"
-          disabled={canUseWindow && window?.appPermissions?.canAddFaculty === false}
         >
           <Plus size={18} /> Add Faculty
         </button>
@@ -1040,9 +1033,6 @@ const staffDirectoryConfig = {
 
     return filtered;
   },
-  permissions: {
-    canCreate: () => !canUseWindow || (window?.appPermissions?.canCreateStaff !== false)
-  },
   enableCreate: true,
   emptyMessage: 'No staff members found.',
   getColumns: ({ baseColumns, renderStatusToggles, editFormData, newRecord, handleChange, handleCreateChange, setEditFormData, setNewRecord, errors }) => {
@@ -1144,7 +1134,6 @@ const staffDirectoryConfig = {
       <button
         onClick={handlers.handleCreate}
         className="btn-primary"
-        disabled={canUseWindow && window?.appPermissions?.canCreateStaff === false}
       >
         <Plus size={18} />
         Add Staff
@@ -1312,11 +1301,6 @@ const adjunctDirectoryConfig = {
 
     return filtered;
   },
-  permissions: {
-    canEdit: () => !canUseWindow || window?.appPermissions?.canEditAdjunct !== false,
-    canDelete: () => !canUseWindow || window?.appPermissions?.canDeleteAdjunct !== false,
-    canCreate: () => !canUseWindow || window?.appPermissions?.canCreateAdjunct !== false
-  },
   enableCreate: true,
   emptyMessage: 'No adjunct faculty found.',
   getColumns: ({ baseColumns, renderStatusToggles, editFormData, newRecord, handleChange, handleCreateChange, setEditFormData, setNewRecord, errors }) => {
@@ -1462,7 +1446,6 @@ const adjunctDirectoryConfig = {
         <button
           onClick={handlers.handleCreate}
           className="btn-primary"
-          disabled={canUseWindow && window?.appPermissions?.canCreateAdjunct === false}
         >
           <Plus size={18} />
           Add Adjunct

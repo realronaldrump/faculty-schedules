@@ -157,34 +157,6 @@ const mergeTransitions = (rows = []) => {
   return Array.from(merged.values()).sort((left, right) => right.count - left.count);
 };
 
-const aggregateRoleBreakdown = (rows = []) => {
-  const merged = new Map();
-
-  rows.forEach((row) => {
-    const breakdown = row.roleBreakdown || {};
-    Object.entries(breakdown).forEach(([role, value]) => {
-      const existing = merged.get(role) || {
-        role,
-        uniqueUsers: 0,
-        sessionCount: 0,
-        pageEnterCount: 0,
-        semanticEventCount: 0,
-        totalMinutesApprox: 0,
-      };
-      existing.uniqueUsers += value.uniqueUsers || 0;
-      existing.sessionCount += value.sessionCount || 0;
-      existing.pageEnterCount += value.pageEnterCount || 0;
-      existing.semanticEventCount += value.semanticEventCount || 0;
-      existing.totalMinutesApprox += value.totalMinutesApprox || 0;
-      merged.set(role, existing);
-    });
-  });
-
-  return Array.from(merged.values()).sort(
-    (left, right) => right.totalMinutesApprox - left.totalMinutesApprox,
-  );
-};
-
 const buildTrendRows = (appRows = []) =>
   [...appRows]
     .sort((left, right) => left.dateKey.localeCompare(right.dateKey))
@@ -242,7 +214,6 @@ export const buildActivityAnalyticsModel = ({
       uid: row.uid || "",
       email: row.email || "",
       displayName: row.displayName || row.email || row.uid || "Unknown User",
-      role: row.role || "unknown",
       activeDays: 0,
       sessionCount: 0,
       pageEnterCount: 0,
@@ -373,7 +344,6 @@ export const buildActivityAnalyticsModel = ({
 
   const topActions = mergeTopActions(appRows);
   const topTransitions = mergeTransitions(appRows);
-  const roleBreakdown = aggregateRoleBreakdown(appRows);
   const busiestHour =
     [...aggregatedHourly].sort(
       (left, right) => right.totalMinutesApprox - left.totalMinutesApprox,
@@ -546,7 +516,6 @@ export const buildActivityAnalyticsModel = ({
       repeatUsers,
       oneTimeUsers,
       busiestHour,
-      roleBreakdown,
       topActions: topActions.slice(0, 6),
       topTransitions: topTransitions.slice(0, 6),
     },
@@ -594,7 +563,6 @@ export const buildPageDrilldownModel = ({
     trendRows,
     heatmapRows: sumBuckets(normalizedRows),
     topActions: mergeTopActions(normalizedRows).slice(0, 6),
-    roleBreakdown: aggregateRoleBreakdown(normalizedRows),
     summary: {
       totalMinutesApprox: filteredRows.reduce(
         (total, row) => total + (row.totalMinutesApprox || 0),

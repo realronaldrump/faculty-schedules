@@ -35,7 +35,7 @@ const VIEWS = [
 ];
 
 const UserActivityPage = () => {
-  const { isActivityOwner, user } = useAuth();
+  const { isOwner, user } = useAuth();
   const [params, setParams] = useSearchParams();
   const [preferences, setPreferences] = useState(() =>
     readActivityPreferences(user?.uid),
@@ -79,7 +79,7 @@ const UserActivityPage = () => {
   const detailId = params.get("id") || "";
   const window = getExplorerWindow(range, previousVisit);
   const data = useActivityExplorerData({
-    enabled: isActivityOwner,
+    enabled: isOwner,
     startDateKey: window.startDateKey,
     endDateKey: window.endDateKey,
   });
@@ -104,7 +104,7 @@ const UserActivityPage = () => {
   };
 
   useEffect(() => {
-    if (!isActivityOwner || !data.updatedAt || recordedVisit.current) return;
+    if (!isOwner || !data.updatedAt || recordedVisit.current) return;
     recordedVisit.current = true;
     if (
       !saveActivityPreferences(user?.uid, {
@@ -112,7 +112,7 @@ const UserActivityPage = () => {
       })
     )
       setStorageError("This browser cannot save the last-visit marker.");
-  }, [isActivityOwner, user?.uid, data.updatedAt]);
+  }, [isOwner, user?.uid, data.updatedAt]);
 
   const baseOptions = useMemo(
     () => ({
@@ -225,7 +225,7 @@ const UserActivityPage = () => {
   };
 
   const exportActivity = async () => {
-    if (exporting || !isActivityOwner) return;
+    if (exporting || !isOwner) return;
     const controller = new AbortController();
     exportController.current = controller;
     setExporting(true);
@@ -269,7 +269,7 @@ const UserActivityPage = () => {
     }
   };
 
-  if (!isActivityOwner)
+  if (!isOwner)
     return (
       <div className="activity-empty">
         This page is only available to the configured activity owner account.

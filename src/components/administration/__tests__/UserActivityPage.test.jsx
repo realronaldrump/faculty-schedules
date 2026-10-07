@@ -23,7 +23,7 @@ const mocks = vi.hoisted(() => ({
   owner: true,
 }));
 vi.mock("../../../contexts/AuthContext.jsx", () => ({
-  useAuth: () => ({ isActivityOwner: mocks.owner, user: { uid: "owner" } }),
+  useAuth: () => ({ isOwner: mocks.owner, user: { uid: "owner" } }),
 }));
 vi.mock("../../../firebase", () => ({ db: {} }));
 vi.mock("firebase/firestore", () => ({

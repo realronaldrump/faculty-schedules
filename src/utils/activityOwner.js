@@ -1,9 +1,0 @@
-// Client source of truth for the owner UID. The same value is duplicated in
-// firestore.rules (isActivityOwner) because rules cannot import this module.
-const ACTIVITY_OWNER_UID = "fjQuh4iAMFYi8URf35Yv5RRijKw2";
-const ACTIVITY_OWNER_PAGE_ID = "admin/user-activity";
-
-export const isActivityOwnerUid = (uid) =>
-  typeof uid === "string" && uid === ACTIVITY_OWNER_UID;
-
-export const isOwnerOnlyPageId = (pageId) => pageId === ACTIVITY_OWNER_PAGE_ID;

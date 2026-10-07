@@ -4,7 +4,13 @@ import JobCard from "./JobCard";
 import TimelineVisualization from "./TimelineVisualization";
 import StatusBadge, { getStudentStatus } from "./StatusBadge";
 import Modal from "../shared/Modal";
-import { parseStudentWorkerDate } from "../../utils/studentWorkers";
+import {
+  calculateWeeklyHoursFromSchedule,
+  isStudentJobEnded,
+  parseHourlyRate,
+  parseStudentWorkerDate,
+  toStudentWorkerDateString,
+} from "../../utils/studentWorkers";
 import useStudentJobEditor from "../../hooks/useStudentJobEditor";
 import useStudentSave from "../../hooks/useStudentSave";
 
@@ -41,14 +47,12 @@ const StudentAddWizard = ({
 }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [student, setStudent] = useState(() => {
-    const today = new Date();
-    const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     return {
       name: isTutorialMode ? "[TUTORIAL] Test Student" : "",
       email: isTutorialMode ? "tutorial.test@example.edu" : "",
       phone: "",
       hasNoPhone: isTutorialMode,
-      startDate: localDate,
+      startDate: toStudentWorkerDateString(),
       endDate: "",
       isActive: true,
       jobs: [],
@@ -170,36 +174,21 @@ const StudentAddWizard = ({
     saveStudent(candidate);
   };
 
-  // Calculate totals
-  const calculateTotalHours = () => {
-    return student.jobs.reduce((total, job) => {
-      return (
+  // Totals cover current jobs only, matching the edit modal.
+  const currentJobs = student.jobs.filter((job) => !isStudentJobEnded(job));
+  const calculateTotalHours = () =>
+    currentJobs.reduce(
+      (total, job) => total + calculateWeeklyHoursFromSchedule(job.weeklySchedule),
+      0,
+    );
+  const calculateWeeklyPay = () =>
+    currentJobs.reduce(
+      (total, job) =>
         total +
-        (job.weeklySchedule?.reduce((sum, entry) => {
-          const start = parseTime(entry.start);
-          const end = parseTime(entry.end);
-          return sum + (end - start) / 60;
-        }, 0) || 0)
-      );
-    }, 0);
-  };
-
-  const calculateWeeklyPay = () => {
-    return student.jobs.reduce((total, job) => {
-      const hours =
-        job.weeklySchedule?.reduce((sum, entry) => {
-          const start = parseTime(entry.start);
-          const end = parseTime(entry.end);
-          return sum + (end - start) / 60;
-        }, 0) || 0;
-      return total + hours * (parseFloat(job.hourlyRate) || 0);
-    }, 0);
-  };
-
-  const parseTime = (timeStr) => {
-    const [hours, minutes] = timeStr.split(":").map(Number);
-    return hours * 60 + minutes;
-  };
+        calculateWeeklyHoursFromSchedule(job.weeklySchedule) *
+          parseHourlyRate(job.hourlyRate),
+      0,
+    );
 
   const formatCurrency = (value) => {
     return `$${value.toFixed(2)}`;
@@ -571,7 +560,7 @@ const StudentAddWizard = ({
             </div>
           </div>
           <p className="text-xs text-gray-500 mt-3 text-center">
-            Estimated monthly: {formatCurrency(calculateWeeklyPay() * 4)}
+            Estimated monthly: {formatCurrency((calculateWeeklyPay() * 52) / 12)}
           </p>
         </div>
 

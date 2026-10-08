@@ -12,8 +12,8 @@ Root causes (confirmed against prod data):
 ## Prod data (one-time script, scratchpad)
 - [x] Read-only scan: 16 isUPD (all false), no legacy program director fields
 - [x] Pre-deploy: strip isUPD, disable 6 staff accounts, set owner status active
-- [ ] Deploy rules + push client
-- [ ] Post-deploy: delete users.roles/permissions, settings/accessControl, terms.locked
+- [x] Deploy rules + push client (a2f0970; Vercel success)
+- [x] Post-deploy: delete users.roles/permissions, settings/accessControl, terms.locked (verified)
 
 ## Code
 - [x] firestore.rules → approval + owner only (drop roles/pages/validators/term locks)

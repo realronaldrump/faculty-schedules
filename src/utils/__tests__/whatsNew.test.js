@@ -49,6 +49,7 @@ describe("whatsNew releases", () => {
       "Tutorial no longer gets stuck",
       "Clearer hours and pay",
       "No more permission messages",
+      "Fix duplicate CRNs",
     ]);
   });
 });

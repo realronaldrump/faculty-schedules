@@ -185,7 +185,7 @@ const CRNQualityTools = () => {
       setSchedules((prev) =>
         prev.map((s) => (s.id === row.id ? { ...s, ...updateData } : s)),
       );
-      setEditingCrn((prev) => ({ ...prev, [row.id]: "" }));
+      cancelCrnEdit(row.id);
       showNotification?.(
         "success",
         "CRN Updated",
@@ -391,14 +391,17 @@ const CRNQualityTools = () => {
                                   </button>
                                 </div>
                               ) : (
-                                <>
-                                  <button
-                                    onClick={() => cancelCrnEdit(row.id)}
-                                    className="inline-flex items-center px-2 py-1 text-xs bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
-                                  >
-                                    Cancel
-                                  </button>
-                                </>
+                                <button
+                                  onClick={() =>
+                                    setEditingCrn((prev) => ({
+                                      ...prev,
+                                      [row.id]: row.crn || "",
+                                    }))
+                                  }
+                                  className="inline-flex items-center px-2 py-1 text-xs bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                                >
+                                  Edit
+                                </button>
                               )}
                             </td>
                           </tr>

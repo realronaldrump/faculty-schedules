@@ -72,6 +72,12 @@ export const RELEASES = [
         description:
           "Everyone with an approved account can use every page.",
       },
+      {
+        icon: Wrench,
+        title: "Fix duplicate CRNs",
+        description:
+          "In CRN Quality Tools, duplicate CRNs now have an Edit button so you can correct them.",
+      },
     ],
   },
   {

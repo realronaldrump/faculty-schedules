@@ -44,33 +44,33 @@ export const RELEASES = [
   {
     version: 13,
     date: "2026-10-07T16:00:00-06:00",
-    title: "Saving student jobs works again",
+    title: "Student worker fixes",
     summary:
-      "Student worker changes save reliably, tutorials can recover when a step goes missing, and every approved account can use every page.",
+      "Student worker job changes save correctly again, and the Add Student Worker tutorial no longer gets stuck.",
     highlights: [
       {
         icon: BadgeCheck,
-        title: "Student worker saves are fixed",
+        title: "Job changes save",
         description:
-          "Ending a job and adding a new one now saves for every student worker. Some older records had a leftover field that blocked every change.",
-      },
-      {
-        icon: GraduationCap,
-        title: "Hours and pay count current jobs only",
-        description:
-          "Ended jobs stay listed but no longer add to weekly hours, pay, or the 20-hour warning, and new jobs start on today's date.",
+          "Ending a student's job and adding a new one now saves the way you'd expect.",
       },
       {
         icon: BookOpen,
-        title: "Tutorials recover instead of getting stuck",
+        title: "Tutorial no longer gets stuck",
         description:
-          "If a tutorial step needs a window that isn't open, a Back to step button returns you to the last step you can continue from.",
+          "If the tutorial can't find its next step, a Back button takes you to a step you can continue from.",
+      },
+      {
+        icon: GraduationCap,
+        title: "Clearer hours and pay",
+        description:
+          "Weekly hours and pay only count jobs that haven't ended, and new jobs start on today's date.",
       },
       {
         icon: ShieldCheck,
-        title: "No more permission errors",
+        title: "No more permission messages",
         description:
-          "Every approved account can now use every page and action. Archived semesters can still be edited, just like before.",
+          "Everyone with an approved account can use every page.",
       },
     ],
   },

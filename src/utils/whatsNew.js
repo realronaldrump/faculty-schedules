@@ -56,9 +56,9 @@ export const RELEASES = [
       },
       {
         icon: BookOpen,
-        title: "Tutorial no longer gets stuck",
+        title: "Tutorials checked and updated",
         description:
-          "If the tutorial can't find its next step, a Back button takes you to a step you can continue from.",
+          "Every tutorial now matches the current dashboard. If a step can't be found, a Back button takes you to a step you can continue from.",
       },
       {
         icon: GraduationCap,

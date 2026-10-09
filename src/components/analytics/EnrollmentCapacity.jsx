@@ -263,10 +263,9 @@ const EnrollmentCapacity = () => {
         />
       </div>
 
-      <div>
+      <div data-tutorial="capacity-thresholds">
         <button
           type="button"
-          data-tutorial="capacity-thresholds"
           onClick={() => setShowThresholds((v) => !v)}
           className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-baylor-green"
         >

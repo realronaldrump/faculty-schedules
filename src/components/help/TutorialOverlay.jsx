@@ -403,6 +403,17 @@ const TutorialOverlay = () => {
     return () => window.removeEventListener('resize', updateViewport);
   }, []);
 
+  // While a tutorial runs, open dropdown menus are lifted above the dimmed
+  // layer (index.css) so steps can use the menus their target opens.
+  const overlayActive = Boolean(activeTutorial && !isPaused);
+  useEffect(() => {
+    if (!overlayActive) return undefined;
+    document.body.dataset.tutorialActive = "";
+    return () => {
+      delete document.body.dataset.tutorialActive;
+    };
+  }, [overlayActive]);
+
   // Calculate if user can advance to next step
   const canAdvance = !currentStep?.action || actionCompleted;
   const completedActionLostTarget =
@@ -419,8 +430,10 @@ const TutorialOverlay = () => {
     }
 
     const element = document.querySelector(currentStep.target);
-    if (element) {
-      const rect = element.getBoundingClientRect();
+    const rect = element?.getBoundingClientRect();
+    // A target inside a collapsed <details> or a hidden breakpoint measures 0×0:
+    // treat it as missing so recovery kicks in instead of spotlighting a corner.
+    if (element && (rect.width > 0 || rect.height > 0)) {
       setTargetRect({
         top: rect.top,
         left: rect.left,
@@ -572,7 +585,10 @@ const TutorialOverlay = () => {
     if (!activeTutorial || isPaused || isTutorialSaving || isTutorialEnding) return;
 
     const handleKeyDown = (e) => {
-      if (e.key !== 'Escape' && e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+      // Keys belong to the page while typing or while a dialog (e.g. a contact
+      // card) is open, so Escape closes that dialog instead of the tutorial.
+      if (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+      if (document.querySelector('.modal-overlay')) return;
       switch (e.key) {
         case 'ArrowRight':
         case 'Enter':

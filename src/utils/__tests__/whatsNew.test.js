@@ -46,7 +46,7 @@ describe("whatsNew releases", () => {
     expect(LATEST_RELEASE.title).toBe("Student worker fixes");
     expect(LATEST_RELEASE.highlights.map(({ title }) => title)).toEqual([
       "Job changes save",
-      "Tutorial no longer gets stuck",
+      "Tutorials checked and updated",
       "Clearer hours and pay",
       "No more permission messages",
       "Fix duplicate CRNs",

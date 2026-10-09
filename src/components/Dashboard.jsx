@@ -6,11 +6,106 @@ import { useUI } from "../contexts/UIContext";
 import { navigationItems } from "../utils/navigationConfig";
 import { trackAction } from "../utils/activityTracking";
 
+// Defined outside Dashboard so pinning (which re-renders Dashboard) never
+// remounts the cards and collapses the sections a user has opened.
+const SectionCard = ({ section, isOpen, onToggle, isFirst, isPinned, onNavigate, onPinToggle }) => {
+  const SectionIcon = section.icon;
+  const tutorialPinIndex = section.items.findIndex((item) => !isPinned(item.id));
+  const tutorialPinTargetIndex =
+    tutorialPinIndex >= 0 ? tutorialPinIndex : 0;
+
+  return (
+    <details
+      className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden group/card transition-all duration-200 hover:shadow-md hover:border-baylor-green/20"
+      open={isOpen}
+      onToggle={(event) => onToggle(section.id, event.currentTarget.open)}
+    >
+      <summary
+        data-tutorial={isFirst ? "section-card" : undefined}
+        data-tutorial-ready={isFirst ? isOpen : undefined}
+        className="cursor-pointer list-none [&::-webkit-details-marker]:hidden"
+      >
+        <div className="flex items-start justify-between gap-4 p-5">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 rounded-lg bg-baylor-green/10 p-2.5 group-hover/card:bg-baylor-gold/15 transition-all">
+              <SectionIcon className="h-5 w-5 text-baylor-green transition-colors" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800">
+                {section.label}
+              </h3>
+              <p className="mt-0.5 text-xs text-gray-400">
+                {section.description}
+              </p>
+            </div>
+          </div>
+          <ChevronRight className="mt-1.5 h-4 w-4 text-gray-300 transition-all duration-200 group-open:rotate-90 group-hover/card:text-baylor-green/40" />
+        </div>
+      </summary>
+      <div className="border-t border-gray-50 divide-y divide-gray-50">
+        {section.items.map((item, itemIndex) => {
+          const ItemIcon = item.icon || section.icon;
+          const pinned = isPinned(item.id);
+
+          return (
+            <div key={item.id} className="flex items-stretch group/item">
+              <button
+                onClick={() => onNavigate(item.path)}
+                className="flex flex-1 items-start gap-3 px-5 py-3.5 text-left hover:bg-gray-50/80 transition-colors"
+              >
+                <div className="mt-0.5 rounded-lg bg-gray-100/50 p-2 group-hover/item:bg-baylor-gold/10 transition-colors">
+                  <ItemIcon className="h-4 w-4 text-gray-500 group-hover/item:text-baylor-gold transition-colors" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium text-gray-700">
+                      {item.label}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-sm text-gray-400 truncate">
+                    {item.description}
+                  </p>
+                </div>
+                <ChevronRight className="mt-1 h-4 w-4 text-gray-200 group-hover/item:text-baylor-gold/60 transition-colors" />
+              </button>
+              <button
+                data-tutorial={
+                  isFirst && isOpen && itemIndex === tutorialPinTargetIndex
+                    ? "pin-button"
+                    : undefined
+                }
+                onClick={(event) => onPinToggle(event, item.id)}
+                className="flex items-center px-4 text-gray-300 hover:text-baylor-gold transition-colors"
+                aria-pressed={pinned}
+                title={pinned ? "Unpin" : "Pin for quick access"}
+              >
+                <Star
+                  className={`h-4 w-4 ${pinned ? "text-baylor-gold fill-current" : ""}`}
+                />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </details>
+  );
+};
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, userProfile, isOwner } = useAuth();
   const { pinnedPages, togglePinPage, isPinned } = useUI();
   const [searchQuery, setSearchQuery] = useState("");
+  const [openSectionIds, setOpenSectionIds] = useState(() => new Set());
+  const handleSectionToggle = useCallback((sectionId, open) => {
+    setOpenSectionIds((current) => {
+      if (current.has(sectionId) === open) return current;
+      const next = new Set(current);
+      if (open) next.add(sectionId);
+      else next.delete(sectionId);
+      return next;
+    });
+  }, []);
 
   const displayName =
     userProfile?.displayName ||
@@ -123,87 +218,6 @@ const Dashboard = () => {
     },
     [togglePinPage],
   );
-
-  const SectionCard = ({ section, defaultOpen, isFirst }) => {
-    const SectionIcon = section.icon;
-    const tutorialPinIndex = section.items.findIndex((item) => !isPinned(item.id));
-    const tutorialPinTargetIndex =
-      tutorialPinIndex >= 0 ? tutorialPinIndex : 0;
-
-    return (
-      <details
-        className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden group/card transition-all duration-200 hover:shadow-md hover:border-baylor-green/20"
-        open={defaultOpen}
-      >
-        <summary
-          data-tutorial={isFirst ? "section-card" : undefined}
-          className="cursor-pointer list-none [&::-webkit-details-marker]:hidden"
-        >
-          <div className="flex items-start justify-between gap-4 p-5">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 rounded-lg bg-baylor-green/10 p-2.5 group-hover/card:bg-baylor-gold/15 transition-all">
-                <SectionIcon className="h-5 w-5 text-baylor-green transition-colors" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-gray-800">
-                  {section.label}
-                </h3>
-                <p className="mt-0.5 text-xs text-gray-400">
-                  {section.description}
-                </p>
-              </div>
-            </div>
-            <ChevronRight className="mt-1.5 h-4 w-4 text-gray-300 transition-all duration-200 group-open:rotate-90 group-hover/card:text-baylor-green/40" />
-          </div>
-        </summary>
-        <div className="border-t border-gray-50 divide-y divide-gray-50">
-          {section.items.map((item, itemIndex) => {
-            const ItemIcon = item.icon || section.icon;
-            const pinned = isPinned(item.id);
-
-            return (
-              <div key={item.id} className="flex items-stretch group/item">
-                <button
-                  onClick={() => handleNavigate(item.path)}
-                  className="flex flex-1 items-start gap-3 px-5 py-3.5 text-left hover:bg-gray-50/80 transition-colors"
-                >
-                  <div className="mt-0.5 rounded-lg bg-gray-100/50 p-2 group-hover/item:bg-baylor-gold/10 transition-colors">
-                    <ItemIcon className="h-4 w-4 text-gray-500 group-hover/item:text-baylor-gold transition-colors" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-medium text-gray-700">
-                        {item.label}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-sm text-gray-400 truncate">
-                      {item.description}
-                    </p>
-                  </div>
-                  <ChevronRight className="mt-1 h-4 w-4 text-gray-200 group-hover/item:text-baylor-gold/60 transition-colors" />
-                </button>
-                <button
-                  data-tutorial={
-                    isFirst && itemIndex === tutorialPinTargetIndex
-                      ? "pin-button"
-                      : undefined
-                  }
-                  onClick={(event) => handlePinToggle(event, item.id)}
-                  className="flex items-center px-4 text-gray-300 hover:text-baylor-gold transition-colors"
-                  aria-pressed={pinned}
-                  title={pinned ? "Unpin" : "Pin for quick access"}
-                >
-                  <Star
-                    className={`h-4 w-4 ${pinned ? "text-baylor-gold fill-current" : ""}`}
-                  />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </details>
-    );
-  };
 
   return (
     <div className="space-y-6">
@@ -374,8 +388,12 @@ const Dashboard = () => {
             <SectionCard
               key={section.id}
               section={section}
-              defaultOpen={false}
+              isOpen={openSectionIds.has(section.id)}
+              onToggle={handleSectionToggle}
               isFirst={sectionIndex === 0}
+              isPinned={isPinned}
+              onNavigate={handleNavigate}
+              onPinToggle={handlePinToggle}
             />
           ))}
         </div>

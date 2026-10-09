@@ -22,7 +22,10 @@ const FacultySpotlightCard = ({ faculty, locationStatus, onClose }) => {
   } = locationStatus;
 
   return (
-    <div className="university-card border-2 border-baylor-green/20 bg-gradient-to-r from-baylor-green/5 to-transparent animate-fade-in">
+    <div
+      data-tutorial="faculty-spotlight"
+      className="university-card border-2 border-baylor-green/20 bg-gradient-to-r from-baylor-green/5 to-transparent animate-fade-in"
+    >
       <div className="university-card-content">
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-4">

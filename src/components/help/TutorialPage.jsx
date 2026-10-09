@@ -286,7 +286,7 @@ const TutorialPage = () => {
                       ) : (
                         <EyeOff className="w-4 h-4" />
                       )}
-                      Show Tooltips & Hints
+                      Show Tooltips
                     </span>
                     <div className="relative">
                       <input
@@ -354,9 +354,8 @@ const TutorialPage = () => {
         title="Reset Tutorial Progress"
         message={
           <>
-            This will reset all your tutorial completion progress and dismissed
-            hints. You'll be able to go through the tutorials again from the
-            beginning.
+            This will reset all your tutorial completion progress. You'll be
+            able to go through the tutorials again from the beginning.
             <span className="mt-2 block text-sm text-gray-500">
               This action cannot be undone.
             </span>

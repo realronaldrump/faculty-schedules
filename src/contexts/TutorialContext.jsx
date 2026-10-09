@@ -5,7 +5,6 @@
  * - Active tutorial state (which tutorial is running)
  * - Tutorial step progression
  * - Tooltip visibility preferences
- * - First-time user hints
  * - Tutorial completion tracking
  */
 
@@ -48,7 +47,7 @@ export const TUTORIALS = {
         id: "welcome",
         title: "Welcome to Email Lists",
         content:
-          "This tool helps you create customized email lists for faculty, staff, and student workers. You can filter by department, role, building, and more.",
+          "This tool helps you create customized email lists for faculty, staff, and student workers. You can filter by program, job title, building, role, and more.",
         target: null, // No specific element - intro step
         position: "center",
         action: null,
@@ -57,7 +56,7 @@ export const TUTORIALS = {
         id: "tabs",
         title: "Choose Your Audience",
         content:
-          "Use these tabs to switch between Faculty & Staff or Student Workers. Each tab has its own filters and selection.",
+          "Use these tabs to switch between Faculty & Staff or Student Workers. Each tab has its own filters and selection. Stay on Faculty & Staff for this tutorial.",
         target: '[data-tutorial="audience-tabs"]',
         position: "bottom",
         action: null,
@@ -92,19 +91,20 @@ export const TUTORIALS = {
       },
       {
         id: "advanced-filters",
-        title: "Advanced Filters",
+        title: "Open Filters",
         content:
-          "Click here to access powerful filtering options including programs, job titles, buildings, tenure status, and more.",
+          'Click "Filters" to open more options: Programs, Job Titles, Buildings, Role Type, Adjunct Status, Tenure Status, Director Role, and Remote Status.',
         target: '[data-tutorial="advanced-filters-btn"]',
         position: "bottom",
-        action: "Click to expand the advanced filters panel",
+        action: 'Click "Filters" to expand the filter panel',
         actionType: "click",
+        completionTarget: '[data-tutorial="program-filters"]',
       },
       {
         id: "filter-programs",
-        title: "Filter by Program",
+        title: "Filter by Program, Title, or Building",
         content:
-          'Include or exclude specific academic programs. Use "Include Programs" to show only certain programs, or "Exclude Programs" to hide them.',
+          "Pick one or more programs to show only people in those programs (leave it empty to show everyone). Job Titles and Buildings work the same way.",
         target: '[data-tutorial="program-filters"]',
         position: "bottom",
         action: null,
@@ -113,10 +113,10 @@ export const TUTORIALS = {
         id: "select-people",
         title: "Select People",
         content:
-          'Click the checkbox next to each person to select them, or use "Select All" to select everyone in the filtered list.',
+          'Use "Select All" to select everyone in the filtered list. After the tutorial you can also tick the checkbox beside individual people.',
         target: '[data-tutorial="select-all-checkbox"]',
         position: "top",
-        action: "Try selecting a few people from the list",
+        action: 'Click "Select All"',
         actionType: "click",
       },
       {
@@ -141,7 +141,7 @@ export const TUTORIALS = {
         id: "save-preset",
         title: "Save for Later",
         content:
-          'After selecting people, click "Save Preset" to save this list for future use. Give it a memorable name like "All Faculty" or "Remote Staff".',
+          'After the tutorial, select people and click "Save Preset" to save the list for future use. Give it a memorable name like "All Faculty" or "Remote Staff".',
         target: '[data-tutorial="save-preset-btn"]',
         position: "bottom",
         action: null,
@@ -177,13 +177,13 @@ export const TUTORIALS = {
       },
       {
         id: "day-selector",
-        title: "Select a Day",
+        title: "Pick a Date",
         content:
-          "Use these buttons to switch between weekdays. The schedule will update to show classes for the selected day.",
+          "Use the date picker to choose which day to view. The schedule and stats update for that date, and a notice appears if the date is outside the semester.",
         target: '[data-tutorial="day-selector"]',
         position: "bottom",
-        action: "Try clicking a different day to see how the schedule changes",
-        actionType: "click",
+        action: "Pick a different date",
+        actionType: "input",
       },
       {
         id: "building-filter",
@@ -204,10 +204,19 @@ export const TUTORIALS = {
         action: null,
       },
       {
+        id: "stats-cards",
+        title: "Utilization Statistics",
+        content:
+          "These cards show key metrics: total rooms displayed, number of class sessions, total teaching hours, and average utilization (based on a 9-hour day from 8AM-5PM).",
+        target: '[data-tutorial="stats-cards"]',
+        position: "top",
+        action: null,
+      },
+      {
         id: "view-mode",
         title: "Choose Your View",
         content:
-          "Switch between different visualizations: Timeline shows a Gantt-style chart, List shows detailed cards, Week shows the full week, and Calendar shows a monthly view.",
+          "Switch views: Timeline shows a Gantt-style chart of every room for the day, List shows a card per room with its classes, Week shows all rooms across Monday–Friday, and Calendar shows one room's Monday–Friday calendar (pick a room first).",
         target: '[data-tutorial="view-mode-toggle"]',
         position: "bottom",
         action: "Try switching to a different view mode",
@@ -241,19 +250,10 @@ export const TUTORIALS = {
         action: null,
       },
       {
-        id: "stats-cards",
-        title: "Utilization Statistics",
-        content:
-          "These cards show key metrics: total rooms displayed, number of class sessions, total teaching hours, and average utilization (based on a 9-hour day from 8AM-5PM).",
-        target: '[data-tutorial="stats-cards"]',
-        position: "top",
-        action: null,
-      },
-      {
         id: "schedule-display",
         title: "Explore the Schedule",
         content:
-          "Click on any class block to see course details including the instructor, meeting pattern, and room information. You can also click instructor names to view their contact card.",
+          "After the tutorial, click any class block to see course details including the instructor, meeting pattern, and room information. You can also click instructor names to view their contact card.",
         target: '[data-tutorial="schedule-display"]',
         position: "top",
         action: null,
@@ -310,7 +310,7 @@ export const TUTORIALS = {
         id: "row-click",
         title: "View Contact Details",
         content:
-          "Click any row to open a detailed contact card with full information, including weekly schedule for faculty members.",
+          "After the tutorial, click any row to open a detailed contact card. Faculty and adjunct cards list the courses they teach by semester, and student worker cards show their weekly work schedule.",
         target: '[data-tutorial="directory-content"]',
         position: "top",
         action: null,
@@ -319,7 +319,7 @@ export const TUTORIALS = {
         id: "complete",
         title: "You're All Set!",
         content:
-          "You now know how to navigate the People Directory. Use the category cards or tabs to switch views, and click any person to see their full details.",
+          "You now know how to navigate the People Directory. Use the category cards to switch between Faculty, Staff, Adjunct, and Student Workers, and click any person to see their full details.",
         target: null,
         position: "center",
         action: null,
@@ -412,16 +412,16 @@ export const TUTORIALS = {
         id: "temperature-colors",
         title: "Temperature Color Coding",
         content:
-          "Readings are color-coded for quick scanning: Green means within the ideal range (typically 68–72°F), Blue means below it (too cold), Red means above it (too hot), and Gray means no data available.",
+          "Readings are color-coded: Green = within the building's ideal range, Blue = below it (too cold), Red = above it (too hot), Gray = no data. Ideal ranges are set per building in Settings; until a range is set, every reading shows green.",
         target: null,
         position: "center",
         action: null,
       },
       {
         id: "action-tabs",
-        title: "Admin Actions",
+        title: "Import, Export & Settings",
         content:
-          "These buttons open the administrative panels: Import to upload sensor data, Export to download records, and Settings to configure ranges and snapshot times. Let's open a couple.",
+          "These buttons open the data tools: Import to upload sensor data, Export to download records, and Settings to configure ranges and snapshot times. Let's open a couple.",
         target: '[data-tutorial="action-tabs"]',
         position: "bottom",
         action: null,
@@ -459,7 +459,7 @@ export const TUTORIALS = {
         id: "settings-section",
         title: "Temperature Settings",
         content:
-          "Here you set the building timezone, ideal temperature ranges (with optional per-space overrides), snapshot times, and can recompute historical data if needed.",
+          "Here you set the building timezone, the ideal temperature range (with optional overrides by space type), snapshot times, and whether the building is hidden. You can also recompute snapshots for a date range.",
         target: '[data-tutorial="settings-section"]',
         position: "top",
         action: null,
@@ -496,12 +496,12 @@ export const TUTORIALS = {
       },
       {
         id: "student-tab",
-        title: "Student Workers Tab",
+        title: "Student Workers Category",
         content:
-          "Make sure you're on the Student Workers tab. Click it now if you're not already there.",
+          "Make sure the Student Workers card is selected. Click it now if it isn't already highlighted.",
         target: '[data-tutorial="student-workers-card"]',
         position: "bottom",
-        action: "Click to select Student Workers tab",
+        action: "Click the Student Workers card",
         actionType: "click",
         completionTarget: '[data-tutorial="add-student-btn"]',
       },
@@ -529,10 +529,10 @@ export const TUTORIALS = {
         id: "basic-info-enter",
         title: "Enter Basic Information",
         content:
-          "Fill in the form: The name '[TUTORIAL] Test Student' should already be entered. Add an email like 'tutorial.test@example.edu'. You can check 'No Phone' to skip the phone field.",
+          "The form is pre-filled for practice: Full Name '[TUTORIAL] Test Student', Email Address 'tutorial.test@example.edu', and 'No Phone' checked. Name and email are required; phone is required unless 'No Phone' is checked.",
         target: '[data-tutorial="basic-info-form"]',
         position: "right",
-        action: "Enter the required name and email",
+        action: "Check that name and email are filled in",
         actionType: "input",
         completionTarget: '[data-tutorial="basic-info-form"][data-tutorial-ready="true"]',
       },
@@ -591,8 +591,8 @@ export const TUTORIALS = {
         id: "job-title",
         title: "Enter Job Details",
         content:
-          "Enter a job title like 'Tutorial Example Job'. Select any supervisor from the dropdown. Set an hourly rate (e.g., $12.50).",
-        target: '[data-tutorial="job-form"]',
+          "Enter a job title like 'Tutorial Example Job' and an hourly rate (e.g., $12.50). Choosing a supervisor is optional.",
+        target: '[data-tutorial="job-details"]',
         position: "left",
         action: "Fill in job title and rate",
         actionType: "input",
@@ -602,7 +602,7 @@ export const TUTORIALS = {
         id: "schedule-builder",
         title: "Set the Weekly Schedule",
         content:
-          "Use the visual schedule builder to set work hours. Click on a day (like Monday) and set a time range (e.g., 9:00 AM - 11:00 AM). Add at least one shift.",
+          "Use the schedule grid to set work hours: click a cell (e.g., Mon 9 AM) to add a 1-hour block, and click it again to remove it. For exact times, use 'Precise time entry': pick a day, start and end time, then click 'Add time'. Add at least one shift.",
         target: '[data-tutorial="schedule-builder"]',
         position: "top",
         action: "Add at least one work shift",
@@ -624,7 +624,7 @@ export const TUTORIALS = {
         id: "jobs-next",
         title: "Continue to Review",
         content:
-          "Your job assignment is saved. Click 'Next' to review the test student before saving.",
+          "Your job assignment has been added. Click 'Next' to review the test student before saving.",
         target: '[data-tutorial="wizard-next-btn"]',
         position: "top",
         action: "Click Next to continue",
@@ -696,14 +696,14 @@ export const TUTORIALS = {
           "This is the fastest way to navigate. Search every page, tool, and report by name, description, or section. No need to remember where things live.",
         target: '[data-tutorial="global-search"]',
         position: "bottom",
-        action: "Type part of a page name, like 'rooms' or 'email'",
+        action: "Type part of a page name, like 'rooms' or 'email' (don't press Enter yet)",
         actionType: "input",
       },
       {
         id: "search-results",
         title: "Pick a Result",
         content:
-          "Matches appear instantly as you type. Press Enter to jump straight to the top result, or click any match. Press Escape to clear the search.",
+          "Matches appear instantly as you type, searching page names, descriptions, and sections. After the tour, press Enter to jump to the top result or click any match.",
         target: '[data-tutorial="search-results"]',
         position: "bottom",
         action: null,
@@ -726,6 +726,7 @@ export const TUTORIALS = {
         position: "bottom",
         action: "Click the section to expand it",
         actionType: "click",
+        completionTarget: '[data-tutorial="section-card"][data-tutorial-ready="true"]',
       },
       {
         id: "pin-shortcut",
@@ -779,7 +780,7 @@ export const TUTORIALS = {
         id: "asof-control",
         title: "Rewind or Jump Ahead",
         content:
-          "This shows the current time, with a gold pulse when it's live. Open the picker to set any date and time, or press 'Now' to snap back to live. Perfect for previewing tomorrow at 9 AM.",
+          "This shows the as-of time, with a gold pulse when it's live. Clicking it opens a date & time picker where you can set any moment, or press 'Now' to snap back to live. Perfect for previewing tomorrow at 9 AM.",
         target: '[data-tutorial="asof-control"]',
         position: "bottom",
         action: "Click the time to open the date & time picker",
@@ -789,26 +790,27 @@ export const TUTORIALS = {
         id: "faculty-finder",
         title: "Find Anyone Instantly",
         content:
-          "Looking for someone? Type any faculty name to see where they are right now: in class, in their office, or done for the day.",
+          "Looking for someone? Type a faculty name, then pick them from the suggestions (or press ↓ and Enter). You'll see whether they're Teaching, In Office, Free, or Not Available right now.",
         target: '[data-tutorial="faculty-finder"]',
         position: "bottom",
-        action: "Type a faculty member's name",
+        action: "Type a name, then pick it from the suggestions",
         actionType: "input",
+        completionTarget: '[data-tutorial="faculty-spotlight"]',
       },
       {
         id: "spotlight",
         title: "The Spotlight Card",
         content:
-          "When you pick a name, a spotlight card appears with their current location, what they're teaching, and what's next. Close it with the X when you're done.",
-        target: null,
-        position: "center",
+          "This card shows their current status and location, what they're teaching and until when, and where they're headed next. Close it with the X after the tour.",
+        target: '[data-tutorial="faculty-spotlight"]',
+        position: "bottom",
         action: null,
       },
       {
         id: "today-schedule",
         title: "Live Counters",
         content:
-          "These counters refresh every minute: classes in session, faculty teaching, and rooms in use right now. Use the building filter above them to narrow to your area.",
+          "These counters show what's happening at the as-of time: Classes Now, Faculty Teaching, Rooms in Use, and Students On Duty. In live mode they refresh every minute. Use 'Filter by building' above them to narrow to your area.",
         target: '[data-tutorial="today-schedule"]',
         position: "top",
         action: null,
@@ -817,10 +819,10 @@ export const TUTORIALS = {
         id: "explore-button",
         title: "See the Full Picture",
         content:
-          "Want everything at once? Open the explorer to browse every faculty member and room with live status filters.",
-        target: '[data-tutorial="explore-button"]',
+          "Want everything at once? Expand the Explore panel to browse every faculty member or room, with Faculty/Rooms views and status filters.",
+        target: '[data-tutorial="today-explorer"]',
         position: "top",
-        action: "Open the explorer",
+        action: "Click the Explore panel's header to expand it",
         actionType: "click",
       },
       {
@@ -847,7 +849,7 @@ export const TUTORIALS = {
         id: "welcome",
         title: "Three Tools, One Place",
         content:
-          "The Faculty area has three tools for working with instructor schedules: Compare, Availability, and Group Meetings. We'll touch all three. You're starting on Compare.",
+          "The Faculty area has three tools for working with instructor schedules: Compare Schedules, Availability, and Group Meetings. We'll touch all three. You're starting on Compare Schedules.",
         target: null,
         position: "center",
         action: null,
@@ -856,7 +858,7 @@ export const TUTORIALS = {
         id: "faculty-search",
         title: "Add Faculty to Compare",
         content:
-          "On the Compare tab you build a side-by-side view. Open this picker to add faculty by name, or use the program picker beside it to add an entire program at once.",
+          "On the Compare Schedules tab you build a side-by-side view. Click 'Add faculty member...' to search by name and pick someone, or use 'Select program...' beside it to add an entire program at once.",
         target: '[data-tutorial="faculty-search"]',
         position: "bottom",
         action: "Open the picker to add a faculty member",
@@ -876,7 +878,7 @@ export const TUTORIALS = {
         id: "compare-grid",
         title: "Read the Comparison",
         content:
-          "Each selected instructor's schedule lines up here, day by day, so you can spot conflicts and overlaps at a glance. Click any class for details, or a name to open their contact card.",
+          "Each instructor you add lines up here, one timeline per selected day, so you can spot conflicts and overlaps at a glance. Until you add someone you'll see 'Select Faculty to Compare'. After the tour, click a class for details or a name for their contact card.",
         target: '[data-tutorial="compare-grid"]',
         position: "top",
         action: null,
@@ -914,11 +916,12 @@ export const TUTORIALS = {
         id: "meeting-professors",
         title: "Add the Attendees",
         content:
-          "Add everyone who needs to attend by searching their names here. Each person you add narrows the available times.",
+          "Search for attendees, then click the dot beside each name to add them (clicking the name itself opens their contact card). Each person you add narrows the available times.",
         target: '[data-tutorial="meeting-professors"]',
-        position: "bottom",
-        action: "Search for an attendee",
-        actionType: "input",
+        position: "right",
+        action: "Add at least one attendee",
+        actionType: "click",
+        completionTarget: '[data-tutorial="meeting-selected"]',
       },
       {
         id: "meeting-duration",
@@ -933,10 +936,12 @@ export const TUTORIALS = {
         id: "meeting-results",
         title: "Find Common Time",
         content:
-          "Once your attendees are added, this button computes everyone's common free time: the slots when the whole group is available at once.",
+          "Click 'Find Available Times' to see the slots when everyone is free, by weekday. After the tour, click a slot to find an open room.",
         target: '[data-tutorial="meeting-results"]',
         position: "top",
-        action: null,
+        action: "Click Find Available Times",
+        actionType: "click",
+        completionTarget: '[data-tutorial="meeting-results-view"]',
       },
       {
         id: "complete",
@@ -971,7 +976,7 @@ export const TUTORIALS = {
         id: "import-stepper",
         title: "Four Safe Stages",
         content:
-          "Every import follows four stages: Upload → Validate → Preview → Results. This bar tracks where you are, and nothing is saved until you commit at the very end.",
+          "Every import follows four stages: Upload → Validate → Preview → Results. This bar tracks where you are. Your live data isn't changed until you click 'Apply Selected Changes' at the end of the Preview stage.",
         target: '[data-tutorial="import-stepper"]',
         position: "bottom",
         action: null,
@@ -980,7 +985,7 @@ export const TUTORIALS = {
         id: "upload-dropzone",
         title: "Stage 1: Upload",
         content:
-          "Drop a CLSS export here (the .csv you download from CLSS). The wizard reads the file right in your browser. Nothing is sent or saved yet.",
+          "Click 'Select CSV File' to choose a CLSS export (.csv). The wizard reads the file in your browser; nothing is changed yet. (Don't pick a file during this tour.)",
         target: '[data-tutorial="upload-dropzone"]',
         position: "bottom",
         action: null,
@@ -989,7 +994,7 @@ export const TUTORIALS = {
         id: "validate",
         title: "Stage 2: Validate",
         content:
-          "After upload, the wizard auto-detects what kind of export it is and checks the rows for problems, so you catch issues before they ever reach the database.",
+          "After upload, the wizard auto-detects whether the file is a CLSS schedule or a directory export, confirms all required columns are mapped, and shows the first 100 rows. Click 'Generate Preview' to continue.",
         target: null,
         position: "center",
         action: null,
@@ -1007,7 +1012,7 @@ export const TUTORIALS = {
         id: "results",
         title: "Stage 4: Results",
         content:
-          "Only after you commit does the wizard write the data, then show a summary of everything that changed, grouped by type.",
+          "After you click 'Apply Selected Changes', the wizard writes the data and shows an Import Complete summary: how many changes were applied, plus record-matching and cleanup counts.",
         target: null,
         position: "center",
         action: null,
@@ -1025,7 +1030,7 @@ export const TUTORIALS = {
         id: "complete",
         title: "Safe by Design",
         content:
-          "That's the import flow: Upload, Validate, Preview, then commit, with full history and rollback if you ever need it. When you have a real CLSS export, start at Stage 1.",
+          "That's the import flow: Upload, Validate, Preview, then apply, with full history and rollback if you ever need it. When you have a real CLSS export, start at Stage 1.",
         target: null,
         position: "center",
         action: null,
@@ -1045,7 +1050,7 @@ export const TUTORIALS = {
         id: "welcome",
         title: "Reserve a room",
         content:
-          "This tool books Goebel and Mary Gibbs Jones rooms for meetings and events. It checks the official class schedule and existing reservations for you, so you never double-book.",
+          "This tool books department rooms for meetings and events. It checks the official class schedule and existing reservations for you, so you never double-book.",
         target: null,
         position: "center",
         action: null,
@@ -1054,11 +1059,12 @@ export const TUTORIALS = {
         id: "room",
         title: "Pick a room",
         content:
-          "Choose a room to reserve. Only the department's bookable spaces are listed, and labs or studios show a reminder to confirm swipe access.",
+          "Choose a room to reserve. Only rooms Facilities has enabled for reservations are listed (with capacity), and labs or studios show a reminder to confirm swipe access.",
         target: '[data-tutorial="reservation-room"]',
         position: "bottom",
         action: "Select a room to continue",
-        actionType: "input",
+        actionType: "click",
+        completionTarget: '[data-tutorial="reservation-room"][data-tutorial-ready="true"]',
       },
       {
         id: "date",
@@ -1080,7 +1086,7 @@ export const TUTORIALS = {
         id: "title",
         title: "Name the event",
         content:
-          'Give the reservation a title (for example "CFS Retreat" or "faculty search lunch"), and optionally who it is for and a headcount.',
+          'Give the reservation an Event title (for example "CFS Retreat" or "faculty search lunch"). Below it you can add Requested by, an optional Headcount, and Notes.',
         target: '[data-tutorial="reservation-title"]',
         position: "bottom",
         action: null,
@@ -1089,7 +1095,7 @@ export const TUTORIALS = {
         id: "timeline",
         title: "Read the day at a glance",
         content:
-          "This timeline shows the room's day: green blocks are classes from the official schedule, blue blocks are existing reservations. Your proposed slot appears as a dashed outline so you can spot open gaps.",
+          "This timeline shows the room's day from 7 AM to 9 PM: green blocks are classes from the official schedule, blue blocks are existing reservations, and your proposed slot is a dashed outline (green if free, red if it conflicts).",
         target: '[data-tutorial="reservation-timeline"]',
         position: "left",
         action: null,
@@ -1098,7 +1104,7 @@ export const TUTORIALS = {
         id: "book",
         title: "Book it (conflict-checked)",
         content:
-          "When your time is free, this button turns green and you can book instantly. If it overlaps a class or another reservation, the dashboard blocks it and tells you exactly what conflicts. No more hunting for double-bookings.",
+          "'Book room' becomes clickable once you've picked a room, entered a title, and chosen a free time; a green 'Room is free at this time.' banner appears above it. If the slot overlaps a class or another reservation, a red banner lists exactly what conflicts and booking stays disabled.",
         target: '[data-tutorial="reservation-book"]',
         position: "top",
         action: null,
@@ -1107,7 +1113,7 @@ export const TUTORIALS = {
         id: "list",
         title: "Manage reservations",
         content:
-          'Every booking lands here. Use "Outlook" to download a calendar invite (.ics) for any reservation, or "Cancel" to remove it.',
+          'Upcoming reservations (today and later) are listed here. Use "Outlook" to download a calendar invite (.ics), or "Cancel" to delete a reservation (it takes effect immediately).',
         target: '[data-tutorial="reservation-list"]',
         position: "top",
         action: null,
@@ -1163,7 +1169,7 @@ export const TUTORIALS = {
         id: "thresholds",
         title: "Tune the thresholds",
         content:
-          'Open this to change what counts as "near full" or "under-enrolled," and the minimum healthy headcount. The defaults are sensible, but you can match your department\'s rules.',
+          'Click "Adjust thresholds" to change what counts as near full ("Near-full at (%)", default 90), under-enrolled ("Under-enrolled at (%)", default 34), the "Min headcount" (default 6), and how oversized a room must be to flag ("Oversized room ×", default 2.5).',
         target: '[data-tutorial="capacity-thresholds"]',
         position: "bottom",
         action: null,
@@ -1172,7 +1178,7 @@ export const TUTORIALS = {
         id: "over",
         title: "Over / near capacity",
         content:
-          "Sections at or above the fill threshold, or with a waitlist: candidates for a larger room or an extra section. Click any row to open full course details.",
+          "Sections at or above the fill threshold, or with a waitlist: candidates for a larger room or an extra section. After the tour, click any row to open full course details.",
         target: '[data-tutorial="capacity-over"]',
         position: "top",
         action: null,
@@ -1188,9 +1194,9 @@ export const TUTORIALS = {
       },
       {
         id: "mismatch",
-        title: "Room mismatch",
+        title: "Room capacity mismatch",
         content:
-          "Sections where the assigned room is too small for the enrollment, or far larger than needed (a room you could free up for events).",
+          "Sections whose enrollment or cap doesn't fit the assigned room: the room is too small, or it's much larger than the cap (a room you could free up for events).",
         target: '[data-tutorial="capacity-mismatch"]',
         position: "top",
         action: null,
@@ -1218,7 +1224,7 @@ export const TUTORIALS = {
         id: "welcome",
         title: "Compare two semesters",
         content:
-          "After each CLSS import, this shows what changed versus a previous semester. It's the fastest way to sanity-check a new schedule.",
+          "After each CLSS import, this shows what changed versus a previous semester. It's the fastest way to sanity-check a new schedule. (It needs at least two imported semesters.)",
         target: null,
         position: "center",
         action: null,
@@ -1281,31 +1287,6 @@ export const TUTORIALS = {
   },
 };
 
-// Help hints that appear throughout the app
-const HELP_HINTS = {
-  "email-lists-adjunct": {
-    id: "email-lists-adjunct",
-    title: "About Adjuncts",
-    content:
-      'Adjunct faculty are part-time instructors. They are hidden by default because most communications are for full-time faculty. Uncheck "Exclude Adjuncts" to include them.',
-    learnMoreTutorial: "email-lists",
-  },
-  "email-lists-presets": {
-    id: "email-lists-presets",
-    title: "Email List Presets",
-    content:
-      "Presets save your selected people (not filters). When you load a preset, it restores your exact selection regardless of current filters.",
-    learnMoreTutorial: "email-lists",
-  },
-  "email-lists-courses": {
-    id: "email-lists-courses",
-    title: "Course Count Filter",
-    content:
-      'The "Only show faculty with at least 1 course" filter helps identify active instructors for the current semester.',
-    learnMoreTutorial: "email-lists",
-  },
-};
-
 export const TutorialProvider = ({ children }) => {
   const { user, userProfile } = useAuth();
 
@@ -1359,24 +1340,10 @@ export const TutorialProvider = ({ children }) => {
     [tutorialProgressById],
   );
 
-  // Track dismissed hints
-  const [dismissedHints, setDismissedHints] = useState(() => {
-    try {
-      const saved = localStorage.getItem("dismissedHints");
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
   // Persist device-level UI preferences (not account data).
   useEffect(() => {
     localStorage.setItem("tutorialShowTooltips", JSON.stringify(showTooltips));
   }, [showTooltips]);
-
-  useEffect(() => {
-    localStorage.setItem("dismissedHints", JSON.stringify(dismissedHints));
-  }, [dismissedHints]);
 
   // Subscribe to the signed-in user's progress document. Clears on sign-out so
   // progress never leaks between accounts sharing a browser.
@@ -1438,7 +1405,7 @@ export const TutorialProvider = ({ children }) => {
     [actor, tutorialProgressById],
   );
 
-  // Persist the furthest step reached (debounced) while a tutorial is running.
+  // Persist the current step (debounced) while a tutorial is running.
   // Skips writes when the stored step already matches to avoid a write loop on
   // snapshot echo, and never churns an already-completed tutorial.
   useEffect(() => {
@@ -1478,13 +1445,24 @@ export const TutorialProvider = ({ children }) => {
       setIsTutorialEnding(true);
       setTutorialError("");
       try {
-        // Flush any pending debounced step write.
+        const finishedTutorial = activeTutorial;
+
+        // Flush a pending debounced step write so exiting right after moving
+        // to a step still records it (completion below supersedes it).
         if (stepWriteTimerRef.current) {
           clearTimeout(stepWriteTimerRef.current);
           stepWriteTimerRef.current = null;
+          if (!markComplete && finishedTutorial && actor?.uid) {
+            void updateTutorialStep(
+              actor,
+              finishedTutorial.id,
+              currentStepIndex,
+              finishedTutorial.steps.length,
+            ).catch((error) =>
+              console.warn("Failed to record tutorial step:", error),
+            );
+          }
         }
-
-        const finishedTutorial = activeTutorial;
 
         // Run cleanup callback if registered (e.g., delete tutorial student)
         if (cleanupCallbackRef.current) {
@@ -1500,7 +1478,7 @@ export const TutorialProvider = ({ children }) => {
         }
 
         if (markComplete && finishedTutorial && actor?.uid) {
-          // Persist completion (source of truth for the progress ring + admin view).
+          // Persist completion (source of truth for the progress ring + owner view).
           try {
             await markTutorialCompleted(
               actor,
@@ -1542,7 +1520,7 @@ export const TutorialProvider = ({ children }) => {
         setIsTutorialEnding(false);
       }
     },
-    [activeTutorial, tutorialStudentId, actor, isTutorialSaving],
+    [activeTutorial, currentStepIndex, tutorialStudentId, actor, isTutorialSaving],
   );
 
   // Navigate tutorial steps
@@ -1595,24 +1573,6 @@ export const TutorialProvider = ({ children }) => {
     setIsPaused(false);
   }, []);
 
-  // Hint management
-  const dismissHint = useCallback((hintId) => {
-    setDismissedHints((prev) =>
-      prev.includes(hintId) ? prev : [...prev, hintId],
-    );
-  }, []);
-
-  const isHintDismissed = useCallback(
-    (hintId) => {
-      return dismissedHints.includes(hintId);
-    },
-    [dismissedHints],
-  );
-
-  const resetHints = useCallback(() => {
-    setDismissedHints([]);
-  }, []);
-
   // Check if tutorial is completed
   const isTutorialCompleted = useCallback(
     (tutorialId) => {
@@ -1631,7 +1591,6 @@ export const TutorialProvider = ({ children }) => {
         console.warn("Failed to reset tutorial progress:", error);
       }
     }
-    setDismissedHints([]);
   }, [endTutorial, actor]);
 
   // Register cleanup callback for tutorial-created data
@@ -1691,12 +1650,6 @@ export const TutorialProvider = ({ children }) => {
       showTooltips,
       setShowTooltips,
 
-      // Hint management
-      dismissedHints,
-      dismissHint,
-      isHintDismissed,
-      resetHints,
-
       // Reset
       resetAllProgress,
 
@@ -1708,7 +1661,6 @@ export const TutorialProvider = ({ children }) => {
 
       // Static data
       tutorials: TUTORIALS,
-      hints: HELP_HINTS,
     }),
     [
       activeTutorial,
@@ -1732,10 +1684,6 @@ export const TutorialProvider = ({ children }) => {
       tutorialProgressById,
       isTutorialCompleted,
       showTooltips,
-      dismissedHints,
-      dismissHint,
-      isHintDismissed,
-      resetHints,
       resetAllProgress,
       tutorialStudentId,
       setTutorialStudentId,

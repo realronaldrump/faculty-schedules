@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 const store = vi.hoisted(() => ({
   documents: new Map(), rows: [], version: 0, listeners: new Set(),
@@ -143,6 +143,9 @@ describe("student directory save and tutorial flow", () => {
   it("walks all 17 tutorial steps, waits for persistence, and cleans up only its own created record", async () => {
     store.documents.set("other-tutorial", seedStudent("other-tutorial", "[TUTORIAL] Another Session"));
     store.rows.push(seedStudent("other-tutorial", "[TUTORIAL] Another Session"));
+    // jsdom has no layout; the overlay treats 0×0 targets as hidden.
+    const layout = vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({ x: 0, y: 0, top: 0, left: 0, width: 120, height: 32, right: 120, bottom: 32 });
+    onTestFinished(() => layout.mockRestore());
     mount();
     act(() => tutorial.startTutorial("add-student-worker"));
     const next = async () => {

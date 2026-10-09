@@ -45,3 +45,20 @@ Root causes (confirmed against prod data):
   and gains Accounts (approve/disable sign-ups). Six staff-role accounts disabled per owner.
 - Not done (deliberately): student update still writes the record's `id` field — reads map
   the Firestore doc id over it, so it is harmless and corrects stale values.
+
+# Tutorial audit + owner progress tracking — Oct 8 2026
+
+- [x] Static audit of all 12 tutorials (two research passes) against component code
+- [x] Overlay: lift open dropdown menus above the dim layer during tutorials; treat 0×0
+      targets as missing; ignore Escape/arrows while typing or with a dialog open
+- [x] Getting Started: Dashboard SectionCard hoisted out of render + controlled open state
+      (pinning collapsed every section — where Scott and Davis both stalled)
+- [x] Step text/targets fixed across email-lists, room-schedules, people-directory,
+      temperature, add-student-worker, today-live-view, faculty-schedules, import,
+      room-reservations (blocker), enrollment-capacity, term-comparison
+- [x] Deleted never-rendered HELP_HINTS + dismissed-hints state
+- [x] Owner view: current step counts + completed/last-opened dates; exit flushes the
+      pending step write
+- [x] Verified: in-browser runner against an emulator copy of prod data — all 12 tutorials
+      complete end to end; owner panel shows the test user's progress exactly; quick-exit
+      step persisted. 470 tests, lint, build green.

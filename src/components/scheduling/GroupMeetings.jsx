@@ -449,7 +449,10 @@ const GroupMeetings = ({ embedded = false }) => {
           </div>
 
           {/* Faculty Selection */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div
+            data-tutorial="meeting-professors"
+            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6"
+          >
             <h2 className="text-xl font-serif font-semibold text-baylor-green mb-4 flex items-center border-b border-baylor-gold pb-2">
               <Users className="mr-2 text-baylor-gold" size={20} />
               Select Attendees ({selectedProfessors.length} selected)
@@ -554,7 +557,6 @@ const GroupMeetings = ({ embedded = false }) => {
                 />
                 <input
                   type="text"
-                  data-tutorial="meeting-professors"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900"
@@ -565,7 +567,10 @@ const GroupMeetings = ({ embedded = false }) => {
 
             {/* Selected Professors */}
             {selectedProfessors.length > 0 && (
-              <div className="mb-4 p-4 bg-baylor-green/10 rounded-lg border border-baylor-green/20">
+              <div
+                data-tutorial="meeting-selected"
+                className="mb-4 p-4 bg-baylor-green/10 rounded-lg border border-baylor-green/20"
+              >
                 <div className="flex flex-wrap gap-2">
                   {selectedProfessors.map((professor) => {
                     const faculty = facultyLookupData.find(
@@ -699,7 +704,7 @@ const GroupMeetings = ({ embedded = false }) => {
         </div>
       ) : (
         /* Results View */
-        <div className="space-y-6">
+        <div data-tutorial="meeting-results-view" className="space-y-6">
           {/* Results Header */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between">

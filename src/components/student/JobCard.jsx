@@ -143,87 +143,89 @@ const JobCard = ({
         </div>
 
         <div className="space-y-4">
-          {/* Job Title & Supervisor */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <SuggestionInput
-              label="Job Title"
-              required={true}
-              value={draft.jobTitle}
-              onChange={(value) => setDraft({ ...draft, jobTitle: value })}
-              options={existingJobTitles}
-              placeholder="e.g., Front Desk Assistant"
-              helperText="Choose an existing title or add a new one."
-            />
-            <SupervisorSelect
-              label="Supervisor"
-              value={draft.supervisorId}
-              onChange={(value) => {
-                const selected = supervisorOptions.find((option) => option.id === value);
-                const nextSupervisor = value
-                  ? (selected?.label || draft.supervisor || "")
-                  : "";
-                setDraft({
-                  ...draft,
-                  supervisorId: value,
-                  supervisor: nextSupervisor,
-                });
-              }}
-              options={supervisorOptions}
-              placeholder="Select supervisor"
-              helperText="Choose from faculty and staff in the directory."
-              fallbackLabel={draft.supervisor}
-            />
-          </div>
+          <div data-tutorial="job-details" className="space-y-4">
+            {/* Job Title & Supervisor */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <SuggestionInput
+                label="Job Title"
+                required={true}
+                value={draft.jobTitle}
+                onChange={(value) => setDraft({ ...draft, jobTitle: value })}
+                options={existingJobTitles}
+                placeholder="e.g., Front Desk Assistant"
+                helperText="Choose an existing title or add a new one."
+              />
+              <SupervisorSelect
+                label="Supervisor"
+                value={draft.supervisorId}
+                onChange={(value) => {
+                  const selected = supervisorOptions.find((option) => option.id === value);
+                  const nextSupervisor = value
+                    ? (selected?.label || draft.supervisor || "")
+                    : "";
+                  setDraft({
+                    ...draft,
+                    supervisorId: value,
+                    supervisor: nextSupervisor,
+                  });
+                }}
+                options={supervisorOptions}
+                placeholder="Select supervisor"
+                helperText="Choose from faculty and staff in the directory."
+                fallbackLabel={draft.supervisor}
+              />
+            </div>
 
-          {/* Hourly Rate & Dates */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Hourly Rate ($)
-              </label>
-              <div className="relative">
-                <DollarSign
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                  size={16}
-                />
+            {/* Hourly Rate & Dates */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Hourly Rate ($)
+                </label>
+                <div className="relative">
+                  <DollarSign
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                    size={16}
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={draft.hourlyRate}
+                    onChange={(e) =>
+                      setDraft({ ...draft, hourlyRate: e.target.value })
+                    }
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                    placeholder="12.50"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Start Date
+                </label>
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={draft.hourlyRate}
+                  type="date"
+                  value={draft.startDate || ""}
                   onChange={(e) =>
-                    setDraft({ ...draft, hourlyRate: e.target.value })
+                    setDraft({ ...draft, startDate: e.target.value })
                   }
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-                  placeholder="12.50"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
                 />
               </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Start Date
-              </label>
-              <input
-                type="date"
-                value={draft.startDate || ""}
-                onChange={(e) =>
-                  setDraft({ ...draft, startDate: e.target.value })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                End Date
-              </label>
-              <input
-                type="date"
-                value={draft.endDate || ""}
-                onChange={(e) =>
-                  setDraft({ ...draft, endDate: e.target.value })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
-              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  End Date
+                </label>
+                <input
+                  type="date"
+                  value={draft.endDate || ""}
+                  onChange={(e) =>
+                    setDraft({ ...draft, endDate: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
+                />
+              </div>
             </div>
           </div>
 

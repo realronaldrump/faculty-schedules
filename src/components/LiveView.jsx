@@ -1168,7 +1168,7 @@ const LiveView = () => {
       </div>
 
       {/* Explorer */}
-      <div ref={explorerRef} className="mt-6 university-card">
+      <div ref={explorerRef} data-tutorial="today-explorer" className="mt-6 university-card">
         <button
           onClick={handleToggleExplorer}
           className="w-full university-card-header flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors"

@@ -305,10 +305,13 @@ const RoomReservations = () => {
         {/* Booking form */}
         <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="sm:col-span-2">
+            <div
+              className="sm:col-span-2"
+              data-tutorial="reservation-room"
+              data-tutorial-ready={Boolean(selectedSpace)}
+            >
               <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
               <SelectDropdown
-                data-tutorial="reservation-room"
                 value={form.spaceKey}
                 onChange={(e) => setField("spaceKey", e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-baylor-green focus:outline-none focus:ring-1 focus:ring-baylor-green"

@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, ArrowRight, X } from "lucide-react";
 import { TUTORIALS } from "../../../contexts/TutorialContext";
-import { formatCount, formatMinutes } from "./activityDisplay";
+import { formatCount, formatDateTime, formatMinutes } from "./activityDisplay";
 import {
   ExplorerEmpty,
   FeatureList,
@@ -11,6 +11,18 @@ import {
   EntityLink,
 } from "./ExplorerWidgets";
 import { TrendChart, RankedList } from "./ActivityWidgets";
+
+// Step counts use the tutorial's current length, which is what Resume uses.
+const describeTutorialProgress = (progress, totalSteps) => {
+  if (progress?.status === "completed") {
+    return `Completed · ${formatDateTime(progress.completedAt || progress.updatedAt)}`;
+  }
+  if (progress?.status === "started") {
+    const step = Math.min((progress.currentStepIndex || 0) + 1, totalSteps);
+    return `Step ${step} of ${totalSteps} · last opened ${formatDateTime(progress.updatedAt || progress.startedAt)}`;
+  }
+  return "Not started";
+};
 
 export default function ActivityDetailPanel({
   kind,
@@ -253,21 +265,17 @@ export default function ActivityDetailPanel({
               <summary>Tutorial progress · all time</summary>
               {tutorial ? (
                 <ul className="activity-tutorial-list">
-                  {Object.values(TUTORIALS).map((item) => {
-                    const progress = tutorial.tutorials?.[item.id];
-                    return (
-                      <li key={item.id}>
-                        <span>{item.title}</span>
-                        <strong>
-                          {progress?.status === "completed"
-                            ? "Completed"
-                            : progress?.status === "started"
-                              ? `Step ${Math.min((progress.currentStepIndex || 0) + 1, progress.totalSteps || item.steps.length)} of ${progress.totalSteps || item.steps.length}`
-                              : "Not started"}
-                        </strong>
-                      </li>
-                    );
-                  })}
+                  {Object.values(TUTORIALS).map((item) => (
+                    <li key={item.id}>
+                      <span>{item.title}</span>
+                      <strong>
+                        {describeTutorialProgress(
+                          tutorial.tutorials?.[item.id],
+                          item.steps.length,
+                        )}
+                      </strong>
+                    </li>
+                  ))}
                 </ul>
               ) : (
                 <ExplorerEmpty>

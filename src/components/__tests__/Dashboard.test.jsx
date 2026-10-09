@@ -79,7 +79,14 @@ describe("Dashboard", () => {
 
     render(<Dashboard />);
 
+    // The pin target only exists once its section is open.
+    const sectionHeader = document.querySelector('[data-tutorial="section-card"]');
+    expect(document.querySelector('[data-tutorial="pin-button"]')).toBeNull();
+    sectionHeader.closest("details").open = true;
+    fireEvent(sectionHeader.closest("details"), new Event("toggle"));
+
     const tutorialPinButton = document.querySelector('[data-tutorial="pin-button"]');
+    expect(sectionHeader).toHaveAttribute("data-tutorial-ready", "true");
     expect(tutorialPinButton).toBeInTheDocument();
     expect(tutorialPinButton).toHaveAttribute("title", "Pin for quick access");
   });

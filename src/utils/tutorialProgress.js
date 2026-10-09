@@ -2,13 +2,13 @@
  * tutorialProgress - Firestore persistence for per-user tutorial progress.
  *
  * One document per user at `tutorialProgress/{uid}`. The `tutorials` map is
- * keyed by tutorial id and tracks status (started | completed), the furthest
- * step reached, and timestamps. Identity fields are denormalized so the admin
- * User Activity console can render a completion matrix without extra reads.
+ * keyed by tutorial id and tracks status (started | completed), the step the
+ * user is on, and timestamps. Identity fields are denormalized so the owner's
+ * User Activity console can show each person's progress without extra reads.
  *
  * This collection is the single source of truth for completion state. The user
  * reads/writes their own doc (driving the progress ring and cross-device sync);
- * the activity owner can read every doc for administrative visibility. Access is
+ * the owner can read every doc (User Activity → person details). Access is
  * enforced by Firestore rules on the `tutorialProgress` collection.
  */
 
@@ -79,7 +79,7 @@ export const markTutorialStarted = async (
 };
 
 /**
- * Persist the furthest step reached. Does not touch `status` or `startedAt`, so
+ * Persist the current step. Does not touch `status` or `startedAt`, so
  * a merge keeps a tutorial's existing state while advancing the step pointer.
  */
 export const updateTutorialStep = async (

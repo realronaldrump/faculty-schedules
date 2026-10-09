@@ -189,9 +189,24 @@ describe("TutorialOverlay missing-target recovery", () => {
     expect(goToStep).toHaveBeenCalledWith(1);
   });
 
+  it("treats a hidden (0×0) target, e.g. inside a closed <details>, as missing", () => {
+    locationValue = { pathname: "/scheduling/rooms" };
+    const el = document.createElement("div");
+    el.setAttribute("data-tutorial", "day-selector");
+    document.body.appendChild(el); // jsdom measures it 0×0, like a collapsed section
+
+    setStep(1);
+    render(<TutorialOverlay />);
+    act(() => vi.advanceTimersByTime(1300));
+
+    expect(spotlight()).not.toBeInTheDocument();
+    expect(screen.getByText(/Tutorial paused/i)).toBeInTheDocument();
+  });
+
   it("renders normally when the target IS present in the DOM", () => {
     const el = document.createElement("div");
     el.setAttribute("data-tutorial", "day-selector");
+    el.getBoundingClientRect = () => ({ left: 40, right: 280, width: 240, top: 100, bottom: 140, height: 40 });
     document.body.appendChild(el);
 
     setStep(1);

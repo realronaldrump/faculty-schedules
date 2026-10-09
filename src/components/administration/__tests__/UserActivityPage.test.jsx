@@ -34,6 +34,7 @@ vi.mock("firebase/firestore", () => ({
   query: (...args) => args,
 }));
 vi.mock("../../../utils/activitySync", () => ({
+  SUMMARY_LOOKBACK_DAYS: 90,
   syncActivityRollups: (...args) => mocks.sync(...args),
   loadActivitySummaries: (...args) => mocks.summaries(...args),
   loadTodayActivitySummary: (...args) => mocks.today(...args),
@@ -411,6 +412,21 @@ describe("UserActivityPage connected exploration", () => {
     ).toBeInTheDocument();
     expect(mocks.summaries).not.toHaveBeenCalled();
     expect(mocks.history).not.toHaveBeenCalled();
+  });
+
+  it("offers all-time history, loading summaries and events from the start of tracking", async () => {
+    renderPage();
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Activity period" }));
+    fireEvent.click(screen.getByRole("option", { name: "All time" }));
+    await waitFor(() =>
+      expect(mocks.summaries).toHaveBeenLastCalledWith({ startDateKey: "2026-01-01" }),
+    );
+    await waitFor(() =>
+      expect(mocks.history).toHaveBeenLastCalledWith(
+        expect.objectContaining({ startDateKey: "2026-01-01" }),
+      ),
+    );
   });
 
   it("ignores a late history response from the previous date range", async () => {

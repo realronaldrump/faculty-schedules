@@ -103,6 +103,10 @@ try {
   // Telemetry stays owner-only to read; users write only their own records.
   await assertFails(getDoc(doc(db("pending"), "userActivityEvents", "event")));
   await assertSucceeds(getDoc(doc(owner, "userActivityEvents", "event")));
+  // Activity history is kept indefinitely: nobody, not even the owner, deletes it.
+  await assertFails(deleteDoc(doc(owner, "userActivityEvents", "event")));
+  await assertFails(deleteDoc(doc(owner, "userActivityDaily", "2026-10-08_approved")));
+  await assertFails(deleteDoc(doc(owner, "userActivityAnalyticsDaily", "2026-10-08")));
   // "newcomer" registered above and is still pending.
   await assertFails(
     setDoc(doc(db("newcomer"), "tutorialProgress", "newcomer"), { uid: "newcomer" }),

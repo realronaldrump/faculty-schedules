@@ -117,6 +117,21 @@ describe("loadActivitySummaries", () => {
     Object.values(firestoreMocks).forEach((mock) => mock.mockReset());
   });
 
+  it("loads at least 90 days and reaches back to an earlier requested start", async () => {
+    firestoreMocks.getDocs.mockResolvedValue(snapshotFrom([]));
+    const startOf = () =>
+      firestoreMocks.getDocs.mock.calls
+        .map(([queryRef]) => queryRef.parts.find((part) => part.type === "where" && part.operator === ">=")?.value)
+        .filter(Boolean);
+
+    await loadActivitySummaries({ startDateKey: "2026-03-10", now: new Date("2026-03-11T12:00:00Z") });
+    expect(new Set(startOf())).toEqual(new Set(["2025-12-12"]));
+
+    firestoreMocks.getDocs.mockClear();
+    await loadActivitySummaries({ startDateKey: "2025-06-01", now: new Date("2026-03-11T12:00:00Z") });
+    expect(new Set(startOf())).toEqual(new Set(["2025-06-01"]));
+  });
+
   it("preserves stored legacy app/page rollups and navigation transitions", async () => {
     const legacyApp = {
       id: "2026-03-10",

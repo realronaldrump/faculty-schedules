@@ -60,9 +60,20 @@ export const eventLabel = (event) => {
 export const isOwnerActivity = (row, ownerUid) =>
   Boolean((ownerUid && row.uid === ownerUid) || isOwnerUid(row.uid));
 
+// Activity tracking began in 2026, so loading from here covers all history.
+export const ACTIVITY_HISTORY_START_DATE_KEY = "2026-01-01";
+
 export const getExplorerWindow = (range, previousVisit, now = new Date()) => {
   const endDateKey = formatDateKeyInTimeZone(now);
-  const oldest = addDaysToDateKey(endDateKey, -89);
+  if (range === "all") {
+    return {
+      startDateKey: ACTIVITY_HISTORY_START_DATE_KEY,
+      endDateKey,
+      allTime: true,
+      since: false,
+      sinceMs: 0,
+    };
+  }
   const previousDateKey = timestampMs(previousVisit)
     ? formatDateKeyInTimeZone(toDate(previousVisit))
     : "";
@@ -71,9 +82,7 @@ export const getExplorerWindow = (range, previousVisit, now = new Date()) => {
     previousDateKey &&
     timestampMs(previousVisit) <= now.getTime();
   const startDateKey = since
-    ? previousDateKey < oldest
-      ? oldest
-      : previousDateKey
+    ? previousDateKey
     : addDaysToDateKey(
         endDateKey,
         -(Number(range) === 7 ? 6 : Number(range) === 90 ? 89 : 29),
@@ -81,10 +90,9 @@ export const getExplorerWindow = (range, previousVisit, now = new Date()) => {
   return {
     startDateKey,
     endDateKey,
+    allTime: false,
     since: Boolean(since),
-    clipped: Boolean(since && previousDateKey < oldest),
-    sinceMs:
-      since && previousDateKey >= oldest ? timestampMs(previousVisit) : 0,
+    sinceMs: since ? timestampMs(previousVisit) : 0,
   };
 };
 

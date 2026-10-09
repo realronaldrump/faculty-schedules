@@ -225,14 +225,18 @@ describe("activity exploration", () => {
       mergeEventPages([{ id: "a" }, { id: "b" }], [{ id: "b" }, { id: "c" }]),
     ).toHaveLength(3);
   });
-  it("caps the since-last-visit window and uses truthful action labels", () => {
-    expect(
-      getExplorerWindow(
-        "since",
-        "2025-01-01",
-        new Date("2026-09-10T18:00:00Z"),
-      ),
-    ).toMatchObject({ startDateKey: "2026-06-13", clipped: true, sinceMs: 0 });
+  it("keeps old since-last-visit and all-time windows unclipped and uses truthful action labels", () => {
+    const now = new Date("2026-09-10T18:00:00Z");
+    expect(getExplorerWindow("since", "2026-01-15T15:00:00Z", now)).toMatchObject({
+      startDateKey: "2026-01-15",
+      since: true,
+      sinceMs: Date.parse("2026-01-15T15:00:00Z"),
+    });
+    expect(getExplorerWindow("all", "", now)).toMatchObject({
+      startDateKey: "2026-01-01",
+      endDateKey: "2026-09-10",
+      allTime: true,
+    });
     expect(actionLabel("schedule_pdf_exported")).toBe(
       "Opened the PDF print dialog",
     );

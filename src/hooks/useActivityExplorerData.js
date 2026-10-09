@@ -3,10 +3,12 @@ import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
 import { db } from "../firebase";
 import { formatDateKeyInTimeZone } from "../utils/activityAnalytics";
 import {
+  SUMMARY_LOOKBACK_DAYS,
   loadActivitySummaries,
   loadTodayActivitySummary,
   syncActivityRollups,
 } from "../utils/activitySync";
+import { addDaysToDateKey } from "../utils/activityRollup";
 import { loadActivityHistoryPage } from "../utils/activityHistory";
 import { mergeEventPages, timestampMs } from "../utils/activityExplorer";
 import { collectActivityExportHistory } from "../utils/activityExportHistory";
@@ -52,6 +54,14 @@ export default function useActivityExplorerData({
   const requestRef = useRef(0);
   const historyBusyRef = useRef(false);
   const refresh = useCallback(() => setRefreshKey((key) => key + 1), []);
+  // Summaries cover the default window; only periods reaching further back
+  // (all time, an old "since last visit") trigger a longer load.
+  const defaultSummaryStartDateKey = addDaysToDateKey(
+    formatDateKeyInTimeZone(new Date()),
+    -(SUMMARY_LOOKBACK_DAYS - 1),
+  );
+  const summaryStartDateKey =
+    startDateKey && startDateKey < defaultSummaryStartDateKey ? startDateKey : "";
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -72,7 +82,9 @@ export default function useActivityExplorerData({
         }
       }
       const results = await Promise.allSettled([
-        full ? loadActivitySummaries() : loadTodayActivitySummary(),
+        full
+          ? loadActivitySummaries({ startDateKey: summaryStartDateKey })
+          : loadTodayActivitySummary(),
         getDocs(
           query(
             collection(db, "userPresence"),
@@ -160,7 +172,7 @@ export default function useActivityExplorerData({
       clearInterval(timer);
       document.removeEventListener("visibilitychange", tick);
     };
-  }, [enabled, refreshKey]);
+  }, [enabled, refreshKey, summaryStartDateKey]);
 
   useEffect(() => {
     if (!enabled) return undefined;

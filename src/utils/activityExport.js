@@ -3,7 +3,6 @@ import { enumerateDateKeys } from "./activityRollup";
 import {
   actionLabel, buildVisits, eventLabel, isOwnerActivity, mergeEventPages, timestampMs,
 } from "./activityExplorer";
-import { EVENT_RETENTION_DAYS, SUMMARY_LOOKBACK_DAYS } from "./activitySync";
 import { getNavigationMeta } from "./navigationMeta";
 import { createActivityExportWriter, ACTIVITY_EXPORT_PART_BYTES, ACTIVITY_EXPORT_MAX_BYTES } from "./activityExportFiles";
 
@@ -272,7 +271,7 @@ export function buildActivityExport({
     freshness: { ...serializeActivityRecord(sourceUpdatedAt), newestHistoryPage: iso(historyUpdatedAt) },
     consistency: "Loaded browser data, not an atomic database snapshot. Presence and tutorials are current snapshots, not period histories.",
     eventCoverage: { ...history.coverage, firstExportedEventAt: summary.firstExportedEventAt, lastExportedEventAt: summary.lastExportedEventAt, eventsExported: events.length },
-    retention: { configuredRawEventDays: EVENT_RETENTION_DAYS, loadedSummaryLookbackDays: SUMMARY_LOOKBACK_DAYS, note: "Pruning runs when the owner console syncs; availability and tracking coverage can be shorter or longer than this policy." },
+    retention: { policy: "All activity data is kept indefinitely; nothing is pruned.", note: "Tracking coverage starts when each feature began recording." },
     resourceLimits: {
       maxExtraEventDocumentLimits: history.coverage.extraReadBudget, maxUncompressedPartBytes: writerOptions?.partBytes || ACTIVITY_EXPORT_PART_BYTES,
       maxUncompressedArchiveBytes: writerOptions?.maxBytes || ACTIVITY_EXPORT_MAX_BYTES,

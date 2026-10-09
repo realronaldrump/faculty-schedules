@@ -60,7 +60,7 @@ const UserActivityPage = () => {
     previousViewRef.current = view;
   }, [view]);
   const group = params.get("group") === "people" ? "people" : "features";
-  const range = ["7", "30", "90", "since"].includes(params.get("range"))
+  const range = ["7", "30", "90", "all", "since"].includes(params.get("range"))
     ? params.get("range")
     : "30";
   const excludeOwner = params.has("mine")
@@ -77,12 +77,25 @@ const UserActivityPage = () => {
     ? params.get("detail")
     : "";
   const detailId = params.get("id") || "";
-  const window = getExplorerWindow(range, previousVisit);
+  const loadWindow = getExplorerWindow(range, previousVisit);
   const data = useActivityExplorerData({
     enabled: isOwner,
-    startDateKey: window.startDateKey,
-    endDateKey: window.endDateKey,
+    startDateKey: loadWindow.startDateKey,
+    endDateKey: loadWindow.endDateKey,
   });
+  // "All time" starts on the first day with recorded activity.
+  const firstRecordedDateKey = useMemo(
+    () =>
+      [...data.summaries.analyticsRows, ...data.summaries.userDailyRows]
+        .map((row) => row.dateKey)
+        .filter(Boolean)
+        .sort()[0] || "",
+    [data.summaries],
+  );
+  const window =
+    loadWindow.allTime && firstRecordedDateKey
+      ? { ...loadWindow, startDateKey: firstRecordedDateKey }
+      : loadWindow;
   const update = (patch, replace = false) =>
     setParams(
       (current) => {
@@ -318,6 +331,7 @@ const UserActivityPage = () => {
             <option value="7">Last 7 days</option>
             <option value="30">Last 30 days</option>
             <option value="90">Last 90 days</option>
+            <option value="all">All time</option>
             <option value="since" disabled={!timestampMs(previousVisit)}>
               Since my last visit
             </option>
@@ -346,10 +360,7 @@ const UserActivityPage = () => {
         {window.startDateKey} – {window.endDateKey} · Central time · Activity
         across all semesters
         {window.since &&
-          !window.clipped &&
           ` · Daily totals include the day of your last visit; events start ${formatDateTime(previousVisit)}.`}
-        {window.clipped &&
-          " Only the latest 90 days of summaries are available."}
       </p>
       {exportStatus && <p className="activity-notice" role="status">{exportStatus}</p>}
       {Object.entries(data.errors)

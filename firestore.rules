@@ -70,14 +70,13 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Activity history is kept indefinitely: no client may delete it.
     match /userActivityEvents/{id} {
       allow read: if isOwner();
       allow create: if isApproved() &&
         request.resource.data.uid == request.auth.uid &&
         request.resource.data.pageId is string;
-      allow update: if false;
-      // The owner console prunes events older than the retention window.
-      allow delete: if isOwner();
+      allow update, delete: if false;
     }
 
     // Per-user tutorial progress: each user owns their own document; the owner
@@ -100,20 +99,23 @@ service cloud.firestore {
     match /userActivityDaily/{id} {
       allow read: if isOwner();
       allow create, update: if isOwner() || isOwnActivityDailySummary(id);
-      allow delete: if isOwner();
+      allow delete: if false;
     }
 
     match /userActivityAnalyticsDaily/{id} {
-      allow read, write: if isOwner();
+      allow read, create, update: if isOwner();
+      allow delete: if false;
     }
 
     match /userActivityPageDaily/{id} {
-      allow read, write: if isOwner();
+      allow read, create, update: if isOwner();
+      allow delete: if false;
     }
 
     // Rollup watermark/state for the automatic activity sync.
     match /userActivityMeta/{id} {
-      allow read, write: if isOwner();
+      allow read, create, update: if isOwner();
+      allow delete: if false;
     }
   }
 }

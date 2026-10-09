@@ -25,13 +25,12 @@ import { formatDateKeyInTimeZone } from "./activityAnalytics";
 // owner-only rollup remains as a bounded compatibility/backfill path for raw
 // events and legacy data that predate those direct summaries.
 export const ROLLUP_SCHEMA_VERSION = 3;
+// Default window for backfilling rollups and for loading summaries. Activity
+// data is kept indefinitely: nothing here (or anywhere) deletes it.
 export const SUMMARY_LOOKBACK_DAYS = 90;
-
-export const EVENT_RETENTION_DAYS = 365;
 const EVENT_PAGE_SIZE = 1000;
 const ROLLUP_QUERY_PAGE_SIZE = 500;
 const WRITE_BATCH_SIZE = 425;
-const PRUNE_BATCH_LIMIT = 400;
 
 const metaDocRef = () => doc(db, "userActivityMeta", "rollupState");
 
@@ -151,24 +150,6 @@ const writeRollupSummaries = async (
     await batch.commit();
   }
   return writes.length;
-};
-
-const pruneExpiredEvents = async (todayDateKey) => {
-  const cutoffDateKey = addDaysToDateKey(todayDateKey, -EVENT_RETENTION_DAYS);
-  const { start: cutoff } = getDateKeyUtcRange(cutoffDateKey);
-  const snapshot = await getDocs(
-    query(
-      collection(db, "userActivityEvents"),
-      where("timestamp", "<", cutoff),
-      orderBy("timestamp", "asc"),
-      limit(PRUNE_BATCH_LIMIT),
-    ),
-  );
-  if (!snapshot || snapshot.empty || snapshot.docs.length === 0) return 0;
-  const batch = writeBatch(db);
-  snapshot.docs.forEach((docSnap) => batch.delete(docSnap.ref));
-  await batch.commit();
-  return snapshot.docs.length;
 };
 
 /**
@@ -647,7 +628,6 @@ export const syncActivityRollups = async ({
     await writeRollupSummaries(summaries, { protectedUserDocIds });
   }
 
-  const prunedCount = await pruneExpiredEvents(todayDateKey);
   if (plan.mode !== "none" || !metaState) {
     await setDoc(metaDocRef(), {
       coveredThroughDateKey:
@@ -665,7 +645,6 @@ export const syncActivityRollups = async ({
     mode: plan.mode,
     rolledDayCount,
     eventCount,
-    prunedCount,
     coveredThroughDateKey:
       plan.mode === "none"
         ? metaState?.coveredThroughDateKey || ""
@@ -674,12 +653,21 @@ export const syncActivityRollups = async ({
   };
 };
 
+// Loads at least the default lookback (period comparisons rely on it), reaching
+// further back when the selected period starts earlier (e.g. all time).
 export const loadActivitySummaries = async ({
-  lookbackDays = SUMMARY_LOOKBACK_DAYS,
+  startDateKey: requestedStartDateKey = "",
   now = new Date(),
 } = {}) => {
   const todayDateKey = formatDateKeyInTimeZone(now);
-  const startDateKey = addDaysToDateKey(todayDateKey, -(lookbackDays - 1));
+  const defaultStartDateKey = addDaysToDateKey(
+    todayDateKey,
+    -(SUMMARY_LOOKBACK_DAYS - 1),
+  );
+  const startDateKey =
+    requestedStartDateKey && requestedStartDateKey < defaultStartDateKey
+      ? requestedStartDateKey
+      : defaultStartDateKey;
   const [storedAnalyticsRows, storedPageRows, rawUserRows] = await Promise.all([
     fetchRollupRange("userActivityAnalyticsDaily", startDateKey, todayDateKey),
     fetchRollupRange("userActivityPageDaily", startDateKey, todayDateKey),
@@ -700,8 +688,8 @@ export const loadActivitySummaries = async ({
 };
 
 // Minute refreshes only need today's direct per-user documents. Historical
-// app/page rollups are immutable during the day and stay in the page's existing
-// 90-day state.
+// app/page rollups are immutable during the day and stay in the page's loaded
+// state.
 export const loadTodayActivitySummary = async ({ now = new Date() } = {}) => {
   const todayDateKey = formatDateKeyInTimeZone(now);
   const rawUserRows = await fetchRollupRange(

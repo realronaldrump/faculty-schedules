@@ -96,6 +96,21 @@ export const formatMinutesToLabel = (minutes) => {
 };
 
 /**
+ * Format minutes from midnight into a compact label for dense schedules.
+ *
+ * @param {number} minutes - Minutes from midnight
+ * @returns {string} Compact time like "9a" or "12:30p"
+ */
+export const formatMinutesCompact = (minutes) => {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const ampm = h >= 12 ? "p" : "a";
+  const displayHour = ((h + 11) % 12) + 1;
+  if (m === 0) return `${displayHour}${ampm}`;
+  return `${displayHour}:${m.toString().padStart(2, "0")}${ampm}`;
+};
+
+/**
  * Format minutes from midnight into 24-hour HH:MM string.
  *
  * @param {number} minutes - Minutes from midnight

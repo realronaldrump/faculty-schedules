@@ -13,12 +13,14 @@
  *    header Sparkles button shows an unseen dot until they open or dismiss.
  */
 import {
+  ArrowLeftRight,
   BadgeCheck,
   BarChart3,
   BookOpen,
   Building2,
   CalendarCheck,
   CalendarDays,
+  ChartGantt,
   ChartNoAxesCombined,
   ClipboardCheck,
   Download,
@@ -28,6 +30,7 @@ import {
   IdCard,
   LayoutDashboard,
   ListFilter,
+  Palette,
   PanelTop,
   RefreshCw,
   Search,
@@ -41,6 +44,33 @@ import {
 export const WHATS_NEW_STORAGE_KEY = "whatsNewLastSeenVersion";
 
 export const RELEASES = [
+  {
+    version: 14,
+    date: "2026-10-13T12:00:00-05:00",
+    title: "Timeline view for student schedules",
+    summary:
+      "Student worker schedules have a new Timeline view that shows every name and shift time in full. Classic is still the default.",
+    highlights: [
+      {
+        icon: ChartGantt,
+        title: "Try the Timeline view",
+        description:
+          "In Student Workers, choose Timeline in the View toggle above the calendar. Each day is a row, so names and times are never cut off, even on busy days.",
+      },
+      {
+        icon: Palette,
+        title: "One color per job",
+        description:
+          "Timeline gives each job its own color, with a key above the calendar.",
+      },
+      {
+        icon: ArrowLeftRight,
+        title: "Switch back anytime",
+        description:
+          "Use the View toggle to move between Classic and Timeline. This browser remembers your choice.",
+      },
+    ],
+  },
   {
     version: 13,
     date: "2026-10-07T16:00:00-06:00",

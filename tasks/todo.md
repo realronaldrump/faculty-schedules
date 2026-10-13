@@ -1,3 +1,38 @@
+# Student worker Timeline view (opt-in) — Oct 13 2026
+
+Goal: a second calendar mode for Student Worker Schedules that never truncates. Time runs
+across, each day is a band, each shift is a bar with the full name + hours. Classic stays the
+default; a first-visit popup invites users to try Timeline and says they can switch back.
+
+## Code
+- [x] `utils/timeUtils.js`: `formatMinutesCompact` ("9a", "12:30p"); StudentSchedules uses it
+- [x] `utils/studentScheduleTimeline.js`: brand job palette + stable job→color map,
+      timeline window, day layout (label-aware lane packing, same-student lane reuse),
+      view/invite localStorage helpers
+- [x] `scheduling/StudentScheduleTimeline.jsx`: ruler, day bands, bars (buttons → contact card),
+      legend; % positions so print/export scales; layout capped at print width; min width + x-scroll on phones
+- [x] `scheduling/TimelineInviteModal.jsx`: shared Modal, mini preview, Keep Classic / Try Timeline
+- [x] StudentSchedules: Classic | Timeline toggle (calendar tab, no-print), persisted per browser;
+      invite on first visit; trackAction on change
+- [x] What's New release 14 (+ test)
+
+## Verification
+- [x] unit tests: layout (no collisions, label sides, lane reuse), colors, storage helpers
+- [x] component test: Classic default, invite once, Try Timeline persists, toggle back
+- [x] vitest, lint, build, knip vs HEAD
+- [x] browser pane against emulator with synthetic students: both modes, invite, 375px, print export
+
+## Review
+- Timeline is opt-in: Classic is the default; the first visit shows a one-time invite
+  (any close = keep Classic). The View toggle and invite answer persist per browser.
+- Verified in the emulator with the 10 students from the screenshot: 30 bars, no
+  overflowing or overlapping labels live, at the 11in export width, or at 1800px; the
+  page doesn't scroll sideways at 375px (the timeline scrolls inside its frame).
+- vitest 487 pass (15 new: layout, preferences, view toggle + invite), lint, build clean; knip
+  reports no new unused exports.
+- Job colors: Baylor Green and University Gold first, then Baylor Blue and the PMS
+  colors already in the app; silver last so a job never looks disabled.
+
 # Scott's blocked saves + stuck tutorial; remove account-level permissions — Oct 2026
 
 (Previous plan archived at tasks/archive-2026-07-comprehensive-refactor.md)

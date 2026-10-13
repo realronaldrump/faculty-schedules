@@ -16,10 +16,21 @@ import FacultyContactCard from "../FacultyContactCard";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import ExportModal from "../administration/ExportModal";
+import StudentScheduleTimeline from "./StudentScheduleTimeline";
+import TimelineInviteModal from "./TimelineInviteModal";
 import {
   getStudentAssignments,
   isAssignmentActiveDuringSemester,
 } from "../../utils/studentWorkers";
+import { formatMinutesCompact } from "../../utils/timeUtils";
+import {
+  assignJobColors,
+  getSavedCalendarView,
+  hasSeenTimelineInvite,
+  markTimelineInviteSeen,
+  saveCalendarView,
+} from "../../utils/studentScheduleTimeline";
+import { trackAction } from "../../utils/activityTracking";
 
 const DAY_ORDER = ["M", "T", "W", "R", "F"];
 const DAY_LABELS = {
@@ -29,6 +40,11 @@ const DAY_LABELS = {
   R: "Thursday",
   F: "Friday",
 };
+
+const CALENDAR_VIEWS = [
+  { id: "classic", label: "Classic" },
+  { id: "timeline", label: "Timeline" },
+];
 
 // Calendar grid configuration - 8 AM to 5 PM business hours
 const START_HOUR = 8;
@@ -48,15 +64,6 @@ function formatTime(minutes) {
   const hr12 = ((h + 11) % 12) + 1;
   if (m === 0) return `${hr12} ${ampm}`;
   return `${hr12}:${m.toString().padStart(2, "0")} ${ampm}`;
-}
-
-function formatTimeCompact(minutes) {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  const ampm = h >= 12 ? "p" : "a";
-  const hr12 = ((h + 11) % 12) + 1;
-  if (m === 0) return `${hr12}${ampm}`;
-  return `${hr12}:${m.toString().padStart(2, "0")}${ampm}`;
 }
 
 const summarizeList = (items = [], emptyLabel = "All") => {
@@ -140,7 +147,23 @@ const StudentSchedules = ({ embedded = false }) => {
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [selectedStudentForCard, setSelectedStudentForCard] = useState(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [calendarView, setCalendarView] = useState(getSavedCalendarView);
+  const [showTimelineInvite, setShowTimelineInvite] = useState(
+    () => !hasSeenTimelineInvite(),
+  );
   const exportRef = useRef(null);
+
+  const chooseCalendarView = (view, source) => {
+    setCalendarView(view);
+    saveCalendarView(view);
+    trackAction("student_calendar_view_chosen", { view, source });
+  };
+
+  const answerTimelineInvite = (view) => {
+    markTimelineInviteSeen();
+    setShowTimelineInvite(false);
+    chooseCalendarView(view, "invite");
+  };
 
   useEffect(() => {
     loadPeople();
@@ -224,7 +247,12 @@ const StudentSchedules = ({ embedded = false }) => {
     return label || "All Semesters";
   }, [selectedSemesterMeta]);
 
-  const viewLabel = activeTab === "calendar" ? "Weekly Calendar" : "Student List";
+  const viewLabel =
+    activeTab === "list"
+      ? "Student List"
+      : calendarView === "timeline"
+        ? "Weekly Timeline"
+        : "Weekly Calendar";
 
   const exportTitle = useMemo(
     () => `Student-Worker-Schedules-${activeTab}-${semesterLabel || "semester"}`,
@@ -249,25 +277,41 @@ const StudentSchedules = ({ embedded = false }) => {
     includeInactive,
   ]);
 
-  const filteredStudents = useMemo(() => {
-    return studentData
-      .map((student) => {
-        const assignments = getStudentAssignments(student).map(
-          (assignment) => ({
-            ...assignment,
-            isActiveDuringSemester: isAssignmentActiveDuringSemester(
-              assignment,
-              student,
-              selectedSemesterMeta,
-            ),
-          }),
-        );
+  // Scheduled assignments in scope for the semester, before the user's filters.
+  const scheduledStudents = useMemo(
+    () =>
+      studentData.map((student) => ({
+        student,
+        assignments: getStudentAssignments(student).filter(
+          (a) =>
+            Array.isArray(a.schedule) &&
+            a.schedule.length > 0 &&
+            (includeInactive ||
+              isAssignmentActiveDuringSemester(
+                a,
+                student,
+                selectedSemesterMeta,
+              )),
+        ),
+      })),
+    [studentData, includeInactive, selectedSemesterMeta],
+  );
 
-        let filtered = assignments.filter(
-          (a) => Array.isArray(a.schedule) && a.schedule.length > 0,
-        );
-        if (!includeInactive)
-          filtered = filtered.filter((a) => a.isActiveDuringSemester);
+  // One color per job, stable while filtering (Timeline view).
+  const jobColors = useMemo(
+    () =>
+      assignJobColors(
+        scheduledStudents.flatMap(({ assignments }) =>
+          assignments.map((a) => a.jobTitle),
+        ),
+      ),
+    [scheduledStudents],
+  );
+
+  const filteredStudents = useMemo(() => {
+    return scheduledStudents
+      .map(({ student, assignments }) => {
+        let filtered = assignments;
         if (selectedJobTitles.length > 0)
           filtered = filtered.filter((a) =>
             selectedJobTitles.includes(a.jobTitle),
@@ -288,12 +332,10 @@ const StudentSchedules = ({ embedded = false }) => {
       })
       .filter(Boolean);
   }, [
-    studentData,
+    scheduledStudents,
     selectedBuildings,
     selectedJobTitles,
     selectedStudentIds,
-    includeInactive,
-    selectedSemesterMeta,
   ]);
 
   const eventsByDay = useMemo(() => {
@@ -318,6 +360,16 @@ const StudentSchedules = ({ embedded = false }) => {
     });
     return byDay;
   }, [filteredStudents]);
+
+  const timelineDays = useMemo(
+    () =>
+      DAY_ORDER.map((day) => ({
+        id: day,
+        label: DAY_LABELS[day],
+        events: eventsByDay[day],
+      })),
+    [eventsByDay],
+  );
 
   const layoutByDay = useMemo(() => {
     const layout = {};
@@ -531,7 +583,7 @@ const StudentSchedules = ({ embedded = false }) => {
             </div>
           </div>
 
-          <div className="flex items-center gap-6 px-6 py-3 bg-gray-50 border-b border-gray-200 text-sm">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-6 py-3 bg-gray-50 border-b border-gray-200 text-sm">
             <div className="flex items-center gap-2 text-gray-600">
               <Users size={16} className="text-baylor-green" />
               <strong className="text-gray-900">{stats.students}</strong>{" "}
@@ -546,6 +598,32 @@ const StudentSchedules = ({ embedded = false }) => {
               <strong className="text-gray-900">{stats.shifts}</strong>{" "}
               Shifts/Week
             </div>
+            {activeTab === "calendar" && (
+              <div className="no-print ml-auto flex items-center gap-2">
+                <span id="calendar-view-label" className="text-gray-600">
+                  View
+                </span>
+                <div
+                  role="group"
+                  aria-labelledby="calendar-view-label"
+                  className="inline-flex gap-1 rounded-lg bg-gray-100 p-1"
+                >
+                  {CALENDAR_VIEWS.map(({ id, label }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={calendarView === id}
+                      onClick={() =>
+                        calendarView !== id && chooseCalendarView(id, "toggle")
+                      }
+                      className={`rounded-md px-3 py-1 font-medium transition-colors ${calendarView === id ? "bg-baylor-green text-white shadow-sm" : "text-gray-600 hover:bg-gray-200"}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="p-4">
@@ -561,6 +639,12 @@ const StudentSchedules = ({ embedded = false }) => {
                       Adjust filters to view student schedules.
                     </p>
                   </div>
+                ) : calendarView === "timeline" ? (
+                  <StudentScheduleTimeline
+                    days={timelineDays}
+                    jobColors={jobColors}
+                    onSelectStudent={setSelectedStudentForCard}
+                  />
                 ) : (
                   <div className="border border-gray-200 rounded-lg overflow-hidden flex flex-col gap-0.5">
                     {/* Header - separate from grid body */}
@@ -674,8 +758,8 @@ const StudentSchedules = ({ embedded = false }) => {
                                       {event.student.name}
                                     </div>
                                     <div className="text-2xs text-gray-600 leading-tight">
-                                      {formatTimeCompact(event.startMinutes)}-
-                                      {formatTimeCompact(event.endMinutes)}
+                                      {formatMinutesCompact(event.startMinutes)}-
+                                      {formatMinutesCompact(event.endMinutes)}
                                     </div>
                                     {height > 44 &&
                                       event.assignment.jobTitle && (
@@ -780,7 +864,7 @@ const StudentSchedules = ({ embedded = false }) => {
                                                 {daySchedules
                                                   .map(
                                                     (s) =>
-                                                      `${formatTimeCompact(parseTimeToMinutes(s.start))}-${formatTimeCompact(parseTimeToMinutes(s.end))}`,
+                                                      `${formatMinutesCompact(parseTimeToMinutes(s.start))}-${formatMinutesCompact(parseTimeToMinutes(s.end))}`,
                                                   )
                                                   .join(", ")}
                                               </span>
@@ -812,6 +896,12 @@ const StudentSchedules = ({ embedded = false }) => {
           personType="student"
         />
       )}
+
+      <TimelineInviteModal
+        isOpen={showTimelineInvite}
+        onTryTimeline={() => answerTimelineInvite("timeline")}
+        onKeepClassic={() => answerTimelineInvite("classic")}
+      />
 
       <ExportModal
         isOpen={isExportModalOpen}

@@ -41,15 +41,13 @@ describe("whatsNew releases", () => {
     expect(formatReleaseTimestamp(LATEST_RELEASE.date)).toContain("2026");
   });
 
-  it("announces the student worker fixes", () => {
-    expect(LATEST_RELEASE.version).toBe(13);
-    expect(LATEST_RELEASE.title).toBe("Student worker fixes");
+  it("announces the student schedule Timeline view", () => {
+    expect(LATEST_RELEASE.version).toBe(14);
+    expect(LATEST_RELEASE.title).toBe("Timeline view for student schedules");
     expect(LATEST_RELEASE.highlights.map(({ title }) => title)).toEqual([
-      "Job changes save",
-      "Tutorials checked and updated",
-      "Clearer hours and pay",
-      "No more permission messages",
-      "Fix duplicate CRNs",
+      "Try the Timeline view",
+      "One color per job",
+      "Switch back anytime",
     ]);
   });
 });

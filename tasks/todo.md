@@ -1,3 +1,19 @@
+# Sign export: filters — Oct 13 2026
+
+The sign already used the page's filtered shifts, but the dialog had no filter controls and
+didn't say filters applied.
+
+- [x] `utils/studentScheduleFilters.js`: page and sign share filter options, semester scope,
+      building/job/student filtering, and Mon–Fri shifts (moved out of StudentSchedules)
+- [x] Dialog: "Show on the sign" Buildings / Jobs / Students, starting from the page's filters;
+      "Use page filters" and "Show everyone"; changes never touch the page
+- [x] Title/subtitle follow the sign's filters until edited (single building or single job
+      names the title)
+- [x] MultiSelectDropdown: portaled menus sized to their trigger instead of the full viewport
+      (also fixes the existing office-space pickers)
+- [x] Verified: unit + component tests (513 pass), lint, build, knip; emulator with 20
+      students: page filter carries in, dialog job filter, reset links, page unchanged
+
 # One-page printable schedule sign — Oct 13 2026
 
 Goal: Export on Student Worker Schedules makes a sign that prints on exactly one page and

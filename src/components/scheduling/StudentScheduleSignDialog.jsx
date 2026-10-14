@@ -1,15 +1,23 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Printer } from "lucide-react";
 import Modal from "../shared/Modal";
+import MultiSelectDropdown from "../MultiSelectDropdown";
 import StudentScheduleSign from "./StudentScheduleSign";
 import { printSheets } from "../../utils/printSheets";
 import { trackAction, trackFailure } from "../../utils/activityTracking";
+import {
+  EMPTY_FILTERS,
+  buildWeekDays,
+  filterScheduledStudents,
+} from "../../utils/studentScheduleFilters";
 import {
   MAX_NOTE_LENGTH,
   MIN_COMFORTABLE_PT,
   PAPER_SIZES,
   PX_PER_IN,
   SIGN_LAYOUTS,
+  defaultSignSubtitle,
+  defaultSignTitle,
   getSavedSignSettings,
   getSheetSize,
   printedNamePoints,
@@ -105,6 +113,21 @@ const biggerTextOptions = ({ layout, paper, orientation }) => {
     : options[0];
 };
 
+const FILTER_KEYS = ["buildings", "jobTitles", "studentIds"];
+
+const sameFilters = (a, b) =>
+  FILTER_KEYS.every(
+    (key) =>
+      a[key].length === b[key].length && a[key].every((v) => b[key].includes(v)),
+  );
+
+const FilterSelect = ({ label, ...props }) => (
+  <div>
+    <div className="mb-1 text-sm text-gray-700">{label}</div>
+    <MultiSelectDropdown {...props} showSelectedLabels menuPortal />
+  </div>
+);
+
 const FitReadout = ({ fit, settings }) => {
   if (!fit) return null;
   const points = printedNamePoints(settings.layout, fit.scale);
@@ -135,30 +158,48 @@ const FitReadout = ({ fit, settings }) => {
 
 /**
  * StudentScheduleSignDialog - set up and print the one-page schedule sign.
- * Layout, paper, orientation, and note are remembered in this browser; the
- * title and subtitle start from the page's current filters each time.
+ *
+ * The sign starts with the page's filters and has its own Buildings, Jobs,
+ * and Students filters, so one sign per office takes no trips back to the
+ * page. Title and subtitle follow the filters until the user edits them.
+ * Layout, paper, orientation, and note are remembered in this browser.
  */
 const StudentScheduleSignDialog = ({
   isOpen,
   onClose,
-  days,
+  scheduledStudents,
   jobColors,
-  defaultTitle,
-  defaultSubtitle,
+  filterOptions,
+  pageFilters,
+  semesterLabel,
 }) => {
   const [settings, setSettings] = useState(getSavedSignSettings);
-  const [title, setTitle] = useState(defaultTitle);
-  const [subtitle, setSubtitle] = useState(defaultSubtitle);
+  const [filters, setFilters] = useState(pageFilters);
+  // null follows the filters; a string is what the user typed.
+  const [customTitle, setCustomTitle] = useState(null);
+  const [customSubtitle, setCustomSubtitle] = useState(null);
   const [fit, setFit] = useState(null);
   const [printError, setPrintError] = useState("");
   const sheetRef = useRef(null);
 
   useEffect(() => {
     if (!isOpen) return;
-    setTitle(defaultTitle);
-    setSubtitle(defaultSubtitle);
+    setFilters(pageFilters);
+    setCustomTitle(null);
+    setCustomSubtitle(null);
     setPrintError("");
   }, [isOpen]);
+
+  const days = useMemo(
+    () => buildWeekDays(filterScheduledStudents(scheduledStudents, filters)),
+    [scheduledStudents, filters],
+  );
+  const title = customTitle ?? defaultSignTitle(filters);
+  const subtitle =
+    customSubtitle ?? defaultSignSubtitle({ semesterLabel, ...filters });
+  const setFilter = (key) => (values) =>
+    setFilters((previous) => ({ ...previous, [key]: values }));
+  const hasFilters = FILTER_KEYS.some((key) => filters[key].length > 0);
 
   const updateSettings = (patch) =>
     setSettings((previous) => {
@@ -181,6 +222,7 @@ const StudentScheduleSignDialog = ({
         layout: settings.layout,
         paper: settings.paper,
         orientation: settings.orientation,
+        filtered: hasFilters,
       });
     } catch (error) {
       console.error("Sign print failed:", error);
@@ -215,6 +257,62 @@ const StudentScheduleSignDialog = ({
     >
       <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
         <div className="space-y-5">
+          <section aria-labelledby="sign-filters-heading" className="space-y-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+              <h3 id="sign-filters-heading" className="form-label mb-0">
+                Show on the sign
+              </h3>
+              <div className="flex gap-3 text-sm">
+                {!sameFilters(filters, pageFilters) && (
+                  <button
+                    type="button"
+                    className="text-baylor-green underline underline-offset-2"
+                    onClick={() => setFilters(pageFilters)}
+                  >
+                    Use page filters
+                  </button>
+                )}
+                {hasFilters && (
+                  <button
+                    type="button"
+                    className="text-baylor-green underline underline-offset-2"
+                    onClick={() => setFilters(EMPTY_FILTERS)}
+                  >
+                    Show everyone
+                  </button>
+                )}
+              </div>
+            </div>
+            <p className="text-sm text-gray-600">
+              Starts with the filters on the page. Changes here only affect
+              the sign.
+            </p>
+            <FilterSelect
+              label="Buildings"
+              options={filterOptions.buildings}
+              selected={filters.buildings}
+              onChange={setFilter("buildings")}
+              placeholder="All buildings"
+            />
+            <FilterSelect
+              label="Jobs"
+              options={filterOptions.jobTitles}
+              selected={filters.jobTitles}
+              onChange={setFilter("jobTitles")}
+              placeholder="All jobs"
+            />
+            <FilterSelect
+              label="Students"
+              options={filterOptions.studentIds}
+              selected={filters.studentIds}
+              onChange={setFilter("studentIds")}
+              placeholder="All students"
+              displayMap={filterOptions.studentNames}
+              enableSearch
+              searchPlaceholder="Search students..."
+            />
+          </section>
+
           <fieldset>
             <legend className="form-label">Layout</legend>
             <div className="space-y-2">
@@ -268,7 +366,7 @@ const StudentScheduleSignDialog = ({
               type="text"
               className="form-input py-2"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => setCustomTitle(e.target.value)}
             />
           </div>
           <div>
@@ -280,7 +378,7 @@ const StudentScheduleSignDialog = ({
               type="text"
               className="form-input py-2"
               value={subtitle}
-              onChange={(e) => setSubtitle(e.target.value)}
+              onChange={(e) => setCustomSubtitle(e.target.value)}
             />
           </div>
           <div>
@@ -302,7 +400,7 @@ const StudentScheduleSignDialog = ({
             <FitReadout fit={fit} settings={settings} />
           ) : (
             <p className="text-sm text-gray-600" role="status">
-              No shifts match the current filters.
+              No shifts match these filters.
             </p>
           )}
           {printError && (

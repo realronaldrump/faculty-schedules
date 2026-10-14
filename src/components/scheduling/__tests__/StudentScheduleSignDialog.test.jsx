@@ -33,7 +33,7 @@ const studentData = [
       {
         jobTitle: "Nutrition Lab Assistant",
         startDate: "2026-01-05",
-        location: ["Mary Gibbs Jones"],
+        location: ["Goebel"],
         weeklySchedule: [
           { day: "M", start: "10:00", end: "12:00" },
           { day: "W", start: "13:20", end: "14:30" },
@@ -65,6 +65,14 @@ const openDialog = () => {
 };
 
 const sheet = () => document.querySelector(".student-schedule-sign");
+
+// Picks one option from a MultiSelectDropdown, then closes it.
+const choose = (trigger, option) => {
+  fireEvent.click(trigger);
+  const menu = document.querySelector(".app-dropdown-menu");
+  fireEvent.click(within(menu).getByText(option));
+  fireEvent.mouseDown(document.body);
+};
 
 describe("one-page schedule sign", () => {
   beforeEach(() => {
@@ -125,6 +133,54 @@ describe("one-page schedule sign", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /Print or save as PDF/ }));
     await waitFor(() => expect(printSheets).toHaveBeenCalledTimes(1));
     expect(printSheets).toHaveBeenCalledWith([sheet()], "Front Desk");
+  });
+
+  it("starts with the page's filters", () => {
+    render(<StudentSchedules embedded />);
+    fireEvent.click(screen.getByRole("button", { name: /Filters & Search/ }));
+    choose(screen.getByRole("button", { name: "All Buildings" }), "Goebel");
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    const dialog = screen.getByRole("dialog", { name: "Print a one-page schedule" });
+
+    expect(within(dialog).getByRole("button", { name: "Goebel" })).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Title")).toHaveValue("Goebel Student Workers");
+    expect(within(sheet()).getAllByText("Allie Dodd")).toHaveLength(2);
+    expect(within(sheet()).queryByText("Kira Irwin")).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "Use page filters" })).toBeNull();
+  });
+
+  it("filters the sign on its own without changing the page", () => {
+    const dialog = openDialog();
+    choose(within(dialog).getByRole("button", { name: "All jobs" }), "Administrative Assistant");
+
+    expect(within(dialog).getByLabelText("Title")).toHaveValue(
+      "Administrative Assistant Schedule",
+    );
+    expect(within(sheet()).getByText("Kira Irwin")).toBeInTheDocument();
+    expect(within(sheet()).queryByText("Allie Dodd")).toBeNull();
+
+    choose(within(dialog).getByRole("button", { name: "All buildings" }), "Goebel");
+    expect(within(dialog).getByText("No shifts match these filters.")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /Print or save as PDF/ })).toBeDisabled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Show everyone" }));
+    expect(within(sheet()).getByText("Kira Irwin")).toBeInTheDocument();
+    expect(within(sheet()).getAllByText("Allie Dodd")).toHaveLength(2);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: /Filters & Search/ }));
+    expect(screen.getByRole("button", { name: "All Buildings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All Job Titles" })).toBeInTheDocument();
+  });
+
+  it("keeps a typed title when the filters change", () => {
+    const dialog = openDialog();
+    fireEvent.change(within(dialog).getByLabelText("Title"), {
+      target: { value: "Front Desk" },
+    });
+    choose(within(dialog).getByRole("button", { name: "All buildings" }), "Goebel");
+    expect(within(dialog).getByLabelText("Title")).toHaveValue("Front Desk");
+    expect(within(dialog).getByLabelText("Subtitle")).toHaveValue("Fall 2026");
   });
 
   it("reports how large names will print", () => {

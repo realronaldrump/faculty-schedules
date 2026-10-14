@@ -43,22 +43,33 @@ describe("printedNamePoints", () => {
 });
 
 describe("default title and subtitle", () => {
-  it("names a single filtered building", () => {
-    expect(defaultSignTitle(["Mary Gibbs Jones"])).toBe(
+  it("names a single filtered building, else a single job", () => {
+    expect(defaultSignTitle({ buildings: ["Mary Gibbs Jones"], jobTitles: ["Front Desk"] })).toBe(
       "Mary Gibbs Jones Student Workers",
     );
-    expect(defaultSignTitle([])).toBe("Student Worker Schedule");
-    expect(defaultSignTitle(["A", "B"])).toBe("Student Worker Schedule");
+    expect(defaultSignTitle({ buildings: [], jobTitles: ["Front Desk"] })).toBe(
+      "Front Desk Schedule",
+    );
+    expect(defaultSignTitle({ buildings: [], jobTitles: [] })).toBe("Student Worker Schedule");
+    expect(defaultSignTitle({ buildings: ["A", "B"], jobTitles: ["X", "Y"] })).toBe(
+      "Student Worker Schedule",
+    );
   });
 
-  it("lists the term, extra buildings, and filtered jobs", () => {
+  it("lists the term and any filters the title doesn't name", () => {
     expect(
       defaultSignSubtitle({
         semesterLabel: "Fall 2026",
         buildings: ["A", "B"],
-        jobTitles: ["Front Desk"],
+        jobTitles: ["Front Desk", "Lab"],
       }),
-    ).toBe("Fall 2026 · A, B · Front Desk");
+    ).toBe("Fall 2026 · A, B · Front Desk, Lab");
+    expect(
+      defaultSignSubtitle({ semesterLabel: "Fall 2026", buildings: ["A"], jobTitles: ["Lab"] }),
+    ).toBe("Fall 2026 · Lab");
+    expect(
+      defaultSignSubtitle({ semesterLabel: "Fall 2026", buildings: [], jobTitles: ["Lab"] }),
+    ).toBe("Fall 2026");
     expect(defaultSignSubtitle({ semesterLabel: "", buildings: ["A"] })).toBe("");
   });
 });

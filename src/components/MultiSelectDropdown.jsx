@@ -127,8 +127,10 @@ const MultiSelectDropdown = ({
     <div
       ref={menuRef}
       style={menuInlineStyle}
-      className={`app-dropdown-menu w-full max-h-60 overflow-y-auto ${
-        menuPortal ? '' : 'absolute mt-1'
+      className={`app-dropdown-menu max-h-60 overflow-y-auto ${
+        // A portaled menu is fixed to the viewport, so w-full would span the
+        // whole screen; it takes the trigger's width from menuStyle instead.
+        menuPortal ? '' : 'absolute mt-1 w-full'
       }`}
     >
       {enableSearch && (

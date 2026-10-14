@@ -19,9 +19,14 @@ import StudentScheduleTimeline from "./StudentScheduleTimeline";
 import TimelineInviteModal from "./TimelineInviteModal";
 import StudentScheduleSignDialog from "./StudentScheduleSignDialog";
 import {
-  getStudentAssignments,
-  isAssignmentActiveDuringSemester,
-} from "../../utils/studentWorkers";
+  DAY_LABELS,
+  DAY_ORDER,
+  buildWeekDays,
+  filterScheduledStudents,
+  getScheduledStudents,
+  getStudentFilterOptions,
+  parseTimeToMinutes,
+} from "../../utils/studentScheduleFilters";
 import { formatMinutesCompact } from "../../utils/timeUtils";
 import {
   assignJobColors,
@@ -31,19 +36,6 @@ import {
   saveCalendarView,
 } from "../../utils/studentScheduleTimeline";
 import { trackAction } from "../../utils/activityTracking";
-import {
-  defaultSignSubtitle,
-  defaultSignTitle,
-} from "../../utils/studentScheduleSign";
-
-const DAY_ORDER = ["M", "T", "W", "R", "F"];
-const DAY_LABELS = {
-  M: "Monday",
-  T: "Tuesday",
-  W: "Wednesday",
-  R: "Thursday",
-  F: "Friday",
-};
 
 const CALENDAR_VIEWS = [
   { id: "classic", label: "Classic" },
@@ -54,12 +46,6 @@ const CALENDAR_VIEWS = [
 const START_HOUR = 8;
 const END_HOUR = 17;
 const HOUR_HEIGHT = 48; // pixels per hour - fits 9 hours in ~432px
-
-function parseTimeToMinutes(timeStr) {
-  if (!timeStr) return 0;
-  const [hh, mm] = timeStr.split(":").map((v) => parseInt(v, 10));
-  return hh * 60 + (mm || 0);
-}
 
 function formatTime(minutes) {
   const h = Math.floor(minutes / 60);
@@ -165,74 +151,18 @@ const StudentSchedules = ({ embedded = false }) => {
     loadPeople();
   }, [loadPeople]);
 
-  const buildingOptions = useMemo(() => {
-    const set = new Set();
-    studentData.forEach((s) => {
-      getStudentAssignments(s).forEach((a) => {
-        (a.buildings || []).forEach((b) => b && set.add(b));
-      });
-    });
-    return Array.from(set).sort();
-  }, [studentData]);
-
-  const jobTitleOptions = useMemo(() => {
-    const set = new Set();
-    studentData.forEach((s) => {
-      getStudentAssignments(s).forEach((a) => {
-        if (a?.jobTitle) set.add(a.jobTitle);
-      });
-    });
-    return Array.from(set).sort();
-  }, [studentData]);
-
-  const studentIdOptions = useMemo(() => {
-    const getFirstNameKey = (name) => {
-      if (!name) return "";
-      const n = String(name).trim();
-      if (!n) return "";
-      if (n.includes(",")) {
-        const afterComma = n.split(",")[1]?.trim() || "";
-        return (afterComma.split(/\s+/)[0] || "").toLowerCase();
-      }
-      return (n.split(/\s+/)[0] || "").toLowerCase();
-    };
-
-    return studentData
-      .filter((s) => s?.id)
-      .map((s) => ({
-        id: s.id,
-        name: s.name || "",
-        firstKey: getFirstNameKey(s.name),
-      }))
-      .sort((a, b) => {
-        const aMissing = a.firstKey ? 0 : 1;
-        const bMissing = b.firstKey ? 0 : 1;
-        if (aMissing !== bMissing) return aMissing - bMissing;
-
-        const firstCmp = a.firstKey.localeCompare(b.firstKey, undefined, {
-          sensitivity: "base",
-        });
-        if (firstCmp) return firstCmp;
-
-        const nameCmp = a.name.localeCompare(b.name, undefined, {
-          sensitivity: "base",
-        });
-        if (nameCmp) return nameCmp;
-
-        return String(a.id).localeCompare(String(b.id), undefined, {
-          sensitivity: "base",
-        });
-      })
-      .map((s) => s.id);
-  }, [studentData]);
-
-  const studentIdToNameMap = useMemo(() => {
-    const map = {};
-    studentData.forEach((s) => {
-      if (s.id) map[s.id] = s.name || s.id;
-    });
-    return map;
-  }, [studentData]);
+  const filterOptions = useMemo(
+    () => getStudentFilterOptions(studentData),
+    [studentData],
+  );
+  const pageFilters = useMemo(
+    () => ({
+      buildings: selectedBuildings,
+      jobTitles: selectedJobTitles,
+      studentIds: selectedStudentIds,
+    }),
+    [selectedBuildings, selectedJobTitles, selectedStudentIds],
+  );
 
   const semesterLabel =
     selectedSemesterMeta?.term ||
@@ -244,20 +174,7 @@ const StudentSchedules = ({ embedded = false }) => {
   // Scheduled assignments in scope for the semester, before the user's filters.
   const scheduledStudents = useMemo(
     () =>
-      studentData.map((student) => ({
-        student,
-        assignments: getStudentAssignments(student).filter(
-          (a) =>
-            Array.isArray(a.schedule) &&
-            a.schedule.length > 0 &&
-            (includeInactive ||
-              isAssignmentActiveDuringSemester(
-                a,
-                student,
-                selectedSemesterMeta,
-              )),
-        ),
-      })),
+      getScheduledStudents(studentData, selectedSemesterMeta, includeInactive),
     [studentData, includeInactive, selectedSemesterMeta],
   );
 
@@ -272,76 +189,23 @@ const StudentSchedules = ({ embedded = false }) => {
     [scheduledStudents],
   );
 
-  const filteredStudents = useMemo(() => {
-    return scheduledStudents
-      .map(({ student, assignments }) => {
-        let filtered = assignments;
-        if (selectedJobTitles.length > 0)
-          filtered = filtered.filter((a) =>
-            selectedJobTitles.includes(a.jobTitle),
-          );
-        if (selectedBuildings.length > 0) {
-          filtered = filtered.filter((a) =>
-            (a.buildings || []).some((b) => selectedBuildings.includes(b)),
-          );
-        }
-        if (
-          selectedStudentIds.length > 0 &&
-          !selectedStudentIds.includes(student.id)
-        )
-          return null;
-        if (filtered.length === 0) return null;
-
-        return { ...student, visibleAssignments: filtered };
-      })
-      .filter(Boolean);
-  }, [
-    scheduledStudents,
-    selectedBuildings,
-    selectedJobTitles,
-    selectedStudentIds,
-  ]);
-
-  const eventsByDay = useMemo(() => {
-    const byDay = { M: [], T: [], W: [], R: [], F: [] };
-    filteredStudents.forEach((student) => {
-      (student.visibleAssignments || []).forEach((assignment) => {
-        (assignment.schedule || []).forEach((entry) => {
-          if (!entry?.day || !DAY_ORDER.includes(entry.day)) return;
-          const start = parseTimeToMinutes(entry.start);
-          const end = parseTimeToMinutes(entry.end);
-          if (start >= end) return;
-          byDay[entry.day].push({
-            student,
-            assignment,
-            entry,
-            startMinutes: start,
-            endMinutes: end,
-            colorKey: `${student.id}-${assignment.jobTitle}`,
-          });
-        });
-      });
-    });
-    return byDay;
-  }, [filteredStudents]);
-
-  const timelineDays = useMemo(
-    () =>
-      DAY_ORDER.map((day) => ({
-        id: day,
-        label: DAY_LABELS[day],
-        events: eventsByDay[day],
-      })),
-    [eventsByDay],
+  const filteredStudents = useMemo(
+    () => filterScheduledStudents(scheduledStudents, pageFilters),
+    [scheduledStudents, pageFilters],
   );
 
-  const layoutByDay = useMemo(() => {
-    const layout = {};
-    DAY_ORDER.forEach((day) => {
-      layout[day] = layoutEventsForDay(eventsByDay[day]);
-    });
-    return layout;
-  }, [eventsByDay]);
+  const timelineDays = useMemo(
+    () => buildWeekDays(filteredStudents),
+    [filteredStudents],
+  );
+
+  const layoutByDay = useMemo(
+    () =>
+      Object.fromEntries(
+        timelineDays.map((day) => [day.id, layoutEventsForDay(day.events)]),
+      ),
+    [timelineDays],
+  );
 
   const stats = useMemo(() => {
     const students = new Set();
@@ -431,7 +295,7 @@ const StudentSchedules = ({ embedded = false }) => {
                   Buildings
                 </label>
                 <MultiSelectDropdown
-                  options={buildingOptions}
+                  options={filterOptions.buildings}
                   selected={selectedBuildings}
                   onChange={setSelectedBuildings}
                   placeholder="All Buildings"
@@ -442,7 +306,7 @@ const StudentSchedules = ({ embedded = false }) => {
                   Job Titles
                 </label>
                 <MultiSelectDropdown
-                  options={jobTitleOptions}
+                  options={filterOptions.jobTitles}
                   selected={selectedJobTitles}
                   onChange={setSelectedJobTitles}
                   placeholder="All Job Titles"
@@ -453,11 +317,11 @@ const StudentSchedules = ({ embedded = false }) => {
                   Students
                 </label>
                 <MultiSelectDropdown
-                  options={studentIdOptions}
+                  options={filterOptions.studentIds}
                   selected={selectedStudentIds}
                   onChange={setSelectedStudentIds}
                   placeholder="All Students"
-                  displayMap={studentIdToNameMap}
+                  displayMap={filterOptions.studentNames}
                 />
               </div>
             </div>
@@ -836,14 +700,11 @@ const StudentSchedules = ({ embedded = false }) => {
       <StudentScheduleSignDialog
         isOpen={isSignDialogOpen}
         onClose={() => setIsSignDialogOpen(false)}
-        days={timelineDays}
+        scheduledStudents={scheduledStudents}
         jobColors={jobColors}
-        defaultTitle={defaultSignTitle(selectedBuildings)}
-        defaultSubtitle={defaultSignSubtitle({
-          semesterLabel,
-          buildings: selectedBuildings,
-          jobTitles: selectedJobTitles,
-        })}
+        filterOptions={filterOptions}
+        pageFilters={pageFilters}
+        semesterLabel={semesterLabel}
       />
     </div>
   );

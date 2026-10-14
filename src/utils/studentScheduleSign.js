@@ -50,13 +50,21 @@ export const MIN_COMFORTABLE_PT = 8;
 export const printedNamePoints = (layout, scale) =>
   Math.round(NAME_TEXT_PX[layout] * scale * 0.75 * 2) / 2;
 
-// ---- Defaults from the page's filters ----
+// ---- Defaults from the sign's filters ----
 
-export const defaultSignTitle = (buildings = []) =>
-  buildings.length === 1
-    ? `${buildings[0]} Student Workers`
-    : "Student Worker Schedule";
+const titleJob = ({ buildings = [], jobTitles = [] }) =>
+  buildings.length !== 1 && jobTitles.length === 1 ? jobTitles[0] : "";
 
+/** "<Building> Student Workers", "<Job> Schedule", or a generic title. */
+export const defaultSignTitle = (filters) => {
+  if (filters.buildings?.length === 1) {
+    return `${filters.buildings[0]} Student Workers`;
+  }
+  const job = titleJob(filters);
+  return job ? `${job} Schedule` : "Student Worker Schedule";
+};
+
+/** The term plus any filters the title doesn't already name. */
 export const defaultSignSubtitle = ({
   semesterLabel = "",
   buildings = [],
@@ -65,7 +73,7 @@ export const defaultSignSubtitle = ({
   [
     semesterLabel,
     buildings.length > 1 ? buildings.join(", ") : "",
-    jobTitles.join(", "),
+    titleJob({ buildings, jobTitles }) ? "" : jobTitles.join(", "),
   ]
     .filter(Boolean)
     .join(" · ");

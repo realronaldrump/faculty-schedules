@@ -48,24 +48,9 @@ export const RELEASES = [
   {
     version: 15,
     date: "2026-10-13T20:00:00-05:00",
-    title: "One-page schedule signs",
+    title: "Student schedules: Timeline view and printable signs",
     summary:
-      "Export on Student Worker Schedules now makes a Baylor-branded sign that always prints on one page, ready to laminate and hang.",
-    highlights: [
-      {
-        icon: Printer,
-        title: "Print a schedule sign",
-        description:
-          "Choose Timeline, By day, or By student, pick Letter, Legal, or Tabloid paper, add a title and a note, and check the live preview before you print.",
-      },
-    ],
-  },
-  {
-    version: 14,
-    date: "2026-10-13T12:00:00-05:00",
-    title: "Timeline view for student schedules",
-    summary:
-      "Student worker schedules have a new Timeline view that shows every name and shift time in full. Classic is still the default.",
+      "Student worker schedules have a new Timeline view that shows every name and shift time in full, and Export now makes a one-page sign ready to print and hang. Classic is still the default view.",
     highlights: [
       {
         icon: ChartGantt,
@@ -84,6 +69,12 @@ export const RELEASES = [
         title: "Switch back anytime",
         description:
           "Use the View toggle to move between Classic and Timeline. This browser remembers your choice.",
+      },
+      {
+        icon: Printer,
+        title: "Print a schedule sign",
+        description:
+          "Export makes a Baylor-branded sign that always prints on one page. Choose By day, Timeline, or By student, pick Letter, Legal, or Tabloid paper, add a title and a note, and check the live preview before you print.",
       },
     ],
   },

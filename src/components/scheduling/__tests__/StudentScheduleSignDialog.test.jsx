@@ -117,10 +117,10 @@ describe("one-page schedule sign", () => {
       target: { value: "Front Desk" },
     });
     fireEvent.change(within(dialog).getByLabelText("Note at the bottom"), {
-      target: { value: "Questions? Call 254-710-0000" },
+      target: { value: "Questions? Call 254-710-3626" },
     });
     expect(within(sheet()).getByText("Front Desk")).toBeInTheDocument();
-    expect(within(sheet()).getByText("Questions? Call 254-710-0000")).toBeInTheDocument();
+    expect(within(sheet()).getByText("Questions? Call 254-710-3626")).toBeInTheDocument();
 
     fireEvent.click(within(dialog).getByRole("button", { name: /Print or save as PDF/ }));
     await waitFor(() => expect(printSheets).toHaveBeenCalledTimes(1));

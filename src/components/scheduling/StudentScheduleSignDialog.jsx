@@ -292,7 +292,7 @@ const StudentScheduleSignDialog = ({
               type="text"
               className="form-input py-2"
               maxLength={MAX_NOTE_LENGTH}
-              placeholder="e.g. Questions? Call the front desk at 254-710-0000"
+              placeholder="e.g. Questions? Call the front desk at 254-710-3626"
               value={settings.note}
               onChange={(e) => updateSettings({ note: e.target.value })}
             />

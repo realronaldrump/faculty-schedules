@@ -41,13 +41,11 @@ describe("whatsNew releases", () => {
     expect(formatReleaseTimestamp(LATEST_RELEASE.date)).toContain("2026");
   });
 
-  it("announces the student schedule Timeline view", () => {
-    expect(LATEST_RELEASE.version).toBe(14);
-    expect(LATEST_RELEASE.title).toBe("Timeline view for student schedules");
+  it("announces one-page schedule signs", () => {
+    expect(LATEST_RELEASE.version).toBe(15);
+    expect(LATEST_RELEASE.title).toBe("One-page schedule signs");
     expect(LATEST_RELEASE.highlights.map(({ title }) => title)).toEqual([
-      "Try the Timeline view",
-      "One color per job",
-      "Switch back anytime",
+      "Print a schedule sign",
     ]);
   });
 });

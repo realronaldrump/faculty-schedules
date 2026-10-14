@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FileText, AlertTriangle } from "lucide-react";
 import Modal from "../shared/Modal";
 import { trackAction, trackFailure } from "../../utils/activityTracking";
+import { printSheets } from "../../utils/printSheets";
 
 const resolveExportTargets = (root) => {
   if (!root) return [];
@@ -19,30 +20,6 @@ const resolveExportTargets = (root) => {
   }
   if (targets.size > 0) return Array.from(targets);
   return [root];
-};
-
-const waitForFonts = async (doc) => {
-  if (doc?.fonts?.ready) {
-    try {
-      await doc.fonts.ready;
-    } catch {
-      // Ignore font readiness errors and proceed with export.
-    }
-  }
-};
-
-const waitForImages = async (doc) => {
-  const images = Array.from(doc?.images || []);
-  if (images.length === 0) return;
-  await Promise.all(
-    images.map((img) => {
-      if (img.complete) return Promise.resolve();
-      return new Promise((resolve) => {
-        img.onload = resolve;
-        img.onerror = resolve;
-      });
-    }),
-  );
 };
 
 const ExportModal = ({
@@ -72,76 +49,10 @@ const ExportModal = ({
     }
 
     try {
-      await waitForFonts(document);
       if (onExport) {
         await onExport("pdf");
       }
-
-      const cleanTitle = (title || "schedule").replace(/[^a-zA-Z0-9-_]/g, "-");
-      const styleNodes = Array.from(
-        document.querySelectorAll('link[rel="stylesheet"], style'),
-      );
-      const styles = styleNodes.map((node) => node.outerHTML).join("\n");
-      const exportHtml = targets
-        .map(
-          (target) =>
-            `<div class="export-print-page">${target.outerHTML}</div>`,
-        )
-        .join("");
-      const baseHref = document.baseURI || window.location.href;
-
-      const printFrame = document.createElement("iframe");
-      printFrame.style.position = "fixed";
-      printFrame.style.right = "0";
-      printFrame.style.bottom = "0";
-      printFrame.style.width = "0";
-      printFrame.style.height = "0";
-      printFrame.style.border = "0";
-      printFrame.style.opacity = "0";
-      printFrame.setAttribute("title", "Print frame");
-      printFrame.setAttribute("aria-hidden", "true");
-      document.body.appendChild(printFrame);
-
-      const printDoc = printFrame.contentDocument;
-      const printWindow = printFrame.contentWindow;
-      if (!printDoc || !printWindow) {
-        printFrame.remove();
-        throw new Error("Print frame unavailable.");
-      }
-
-      printDoc.open();
-      printDoc.write(`<!doctype html>
-<html>
-  <head>
-    <title>${cleanTitle}</title>
-    <base href="${baseHref}">
-    ${styles}
-    <style>
-      body { margin: 0; background: #ffffff; }
-      .export-print-root { box-sizing: border-box; }
-      .export-print-page { display: flex; justify-content: center; align-items: flex-start; padding: 16px; box-sizing: border-box; break-after: page; page-break-after: always; }
-      .export-print-page:last-child { break-after: auto; page-break-after: auto; }
-      @media print { .export-print-page { padding: 0; } }
-    </style>
-  </head>
-  <body>
-    <div class="export-print-root">${exportHtml}</div>
-  </body>
-</html>`);
-      printDoc.close();
-
-      const cleanup = () => {
-        if (printFrame.parentNode) {
-          printFrame.parentNode.removeChild(printFrame);
-        }
-      };
-
-      await waitForFonts(printDoc);
-      await waitForImages(printDoc);
-      printWindow.focus();
-      printWindow.print();
-      printWindow.onafterprint = cleanup;
-      setTimeout(cleanup, 1000);
+      const cleanTitle = await printSheets(targets, title || "schedule");
 
       trackAction("schedule_pdf_exported", { title: cleanTitle });
       onClose();

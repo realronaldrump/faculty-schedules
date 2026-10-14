@@ -8,6 +8,7 @@
  * gets more lanes.
  */
 import { STUDENT_SCHEDULE_RULES } from "./studentScheduleUtils";
+import { formatMinutesCompact } from "./timeUtils";
 
 // Label geometry shared by the layout and the bars that render it (px).
 export const LABEL_PADDING_X = 7;
@@ -42,6 +43,19 @@ export const assignJobColors = (jobTitles) => {
     });
   return colors;
 };
+
+/** "9a–12:30p" for a shift. */
+export const formatShiftRange = (event) =>
+  `${formatMinutesCompact(event.startMinutes)}–${formatMinutesCompact(event.endMinutes)}`;
+
+/** Hours to one decimal, without a trailing ".0". */
+export const formatHours = (hours) => String(Math.round(hours * 10) / 10);
+
+/** Sorted job titles of the given shifts, for a color key. */
+export const listJobTitles = (events) =>
+  [...new Set(events.map((event) => event.assignment.jobTitle))]
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
 
 /** The schedule window (8 AM–5 PM), widened to whole hours for any shift outside it. */
 export const getTimelineWindow = (events) =>

@@ -1,3 +1,46 @@
+# One-page printable schedule sign — Oct 13 2026
+
+Goal: Export on Student Worker Schedules makes a sign that prints on exactly one page and
+can be laminated and hung in an office: Baylor-branded, large legible type, no app chrome.
+
+Problems with the old export: printed the on-screen card (tabs/stats chrome, Classic
+truncation), fixed 11in width on an 0.35in-margin page (could spill to page 2), no title,
+no brand mark, no paper choice, no preview, tiny type, browser header/footer URLs.
+
+## Code
+- [x] `utils/printSheets.js`: iframe print extracted from ExportModal (ExportModal uses it)
+- [x] `hooks/useFontEpoch.js`: re-measure once Calluna loads (timeline + sign)
+- [x] Timeline: split into `JobLegend` + `TimelineGrid` (explicit layout width, static or
+      clickable bars, outlined bars for print) + screen wrapper
+- [x] `utils/studentScheduleSign.js`: paper sizes, saved settings, default title/subtitle,
+      by-day and by-student grouping, printed text size
+- [x] `StudentScheduleSign.jsx`: page-sized sheet (@page size, margin 0, 0.5in safe margin,
+      brand mark, gold rule, legend, note, updated date) + fit-to-one-page scaling;
+      layouts Timeline / By day / By student
+- [x] `StudentScheduleSignDialog.jsx`: settings + live preview + fit readout + Print
+- [x] StudentSchedules: Export opens the sign dialog; remove old print-only header/CSS
+- [x] Official HSD horizontal brand mark (green) as SVG in `public/brand/`
+- [x] What's New release 15; activity label for sign prints
+
+## Verification
+- [x] unit tests (sign utils, print util), component test (dialog, layouts, print call)
+- [x] vitest, lint, build, knip
+- [x] browser (emulator): every layout × paper × orientation fits one page; 10 and 20 students
+
+## Review
+- Export now opens "Print a one-page schedule": live preview, three layouts (By day default,
+  Timeline, By student), Letter/Legal/Tabloid × landscape/portrait, editable title and
+  subtitle (prefilled from term + filters), optional note, and a readout of printed name size
+  with specific suggestions when it drops below 8 pt.
+- Verified in the emulator: all 18 layout × paper × orientation combinations fit one page with
+  10 and with 20 students; print frame holds exactly one page-sized sheet with its @page rule,
+  the brand mark loaded, no app chrome, and is removed afterwards.
+- Brand: official HSD horizontal green brand mark (from the brand kit PDF, cropped, digital
+  Baylor Green #154734), Baylor Green title, University Gold rule, Calluna, 0.5in margins.
+- Removed: printing the on-screen card (print-only header, 11in print CSS, ExportModal here).
+  ExportModal now shares `printSheets` with the sign.
+- vitest 504 pass (17 new), lint, build clean; knip unchanged.
+
 # Student worker Timeline view (opt-in) — Oct 13 2026
 
 Goal: a second calendar mode for Student Worker Schedules that never truncates. Time runs

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Calendar,
   List,
@@ -15,9 +15,9 @@ import MultiSelectDropdown from "../MultiSelectDropdown";
 import FacultyContactCard from "../FacultyContactCard";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
-import ExportModal from "../administration/ExportModal";
 import StudentScheduleTimeline from "./StudentScheduleTimeline";
 import TimelineInviteModal from "./TimelineInviteModal";
+import StudentScheduleSignDialog from "./StudentScheduleSignDialog";
 import {
   getStudentAssignments,
   isAssignmentActiveDuringSemester,
@@ -31,6 +31,10 @@ import {
   saveCalendarView,
 } from "../../utils/studentScheduleTimeline";
 import { trackAction } from "../../utils/activityTracking";
+import {
+  defaultSignSubtitle,
+  defaultSignTitle,
+} from "../../utils/studentScheduleSign";
 
 const DAY_ORDER = ["M", "T", "W", "R", "F"];
 const DAY_LABELS = {
@@ -65,13 +69,6 @@ function formatTime(minutes) {
   if (m === 0) return `${hr12} ${ampm}`;
   return `${hr12}:${m.toString().padStart(2, "0")} ${ampm}`;
 }
-
-const summarizeList = (items = [], emptyLabel = "All") => {
-  const cleaned = (items || []).filter(Boolean);
-  if (cleaned.length === 0) return emptyLabel;
-  if (cleaned.length <= 3) return cleaned.join(", ");
-  return `${cleaned.slice(0, 3).join(", ")} +${cleaned.length - 3} more`;
-};
 
 // PMS Color Palette for schedule events
 // Green family
@@ -146,12 +143,11 @@ const StudentSchedules = ({ embedded = false }) => {
   const [activeTab, setActiveTab] = useState("calendar");
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [selectedStudentForCard, setSelectedStudentForCard] = useState(null);
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isSignDialogOpen, setIsSignDialogOpen] = useState(false);
   const [calendarView, setCalendarView] = useState(getSavedCalendarView);
   const [showTimelineInvite, setShowTimelineInvite] = useState(
     () => !hasSeenTimelineInvite(),
   );
-  const exportRef = useRef(null);
 
   const chooseCalendarView = (view, source) => {
     setCalendarView(view);
@@ -238,44 +234,12 @@ const StudentSchedules = ({ embedded = false }) => {
     return map;
   }, [studentData]);
 
-  const semesterLabel = useMemo(() => {
-    const label =
-      selectedSemesterMeta?.term ||
-      selectedSemesterMeta?.label ||
-      selectedSemesterMeta?.name ||
-      selectedSemesterMeta?.termCode;
-    return label || "All Semesters";
-  }, [selectedSemesterMeta]);
-
-  const viewLabel =
-    activeTab === "list"
-      ? "Student List"
-      : calendarView === "timeline"
-        ? "Weekly Timeline"
-        : "Weekly Calendar";
-
-  const exportTitle = useMemo(
-    () => `Student-Worker-Schedules-${activeTab}-${semesterLabel || "semester"}`,
-    [activeTab, semesterLabel],
-  );
-
-  const filterSummary = useMemo(() => {
-    const studentNames = selectedStudentIds.map(
-      (id) => studentIdToNameMap[id] || id,
-    );
-    return {
-      buildings: summarizeList(selectedBuildings),
-      jobs: summarizeList(selectedJobTitles),
-      students: summarizeList(studentNames),
-      includeInactive: includeInactive ? "Yes" : "No",
-    };
-  }, [
-    selectedBuildings,
-    selectedJobTitles,
-    selectedStudentIds,
-    studentIdToNameMap,
-    includeInactive,
-  ]);
+  const semesterLabel =
+    selectedSemesterMeta?.term ||
+    selectedSemesterMeta?.label ||
+    selectedSemesterMeta?.name ||
+    selectedSemesterMeta?.termCode ||
+    "";
 
   // Scheduled assignments in scope for the semester, before the user's filters.
   const scheduledStudents = useMemo(
@@ -418,9 +382,9 @@ const StudentSchedules = ({ embedded = false }) => {
           </p>
         </div>
         <button
-          onClick={() => setIsExportModalOpen(true)}
+          onClick={() => setIsSignDialogOpen(true)}
           className="no-print inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-baylor-green bg-white border border-baylor-green rounded-lg hover:bg-baylor-green hover:text-white transition-colors"
-          title="Export student schedules"
+          title="Print a one-page schedule sign"
         >
           <Download size={16} />
           Export
@@ -548,41 +512,7 @@ const StudentSchedules = ({ embedded = false }) => {
           </button>
         </div>
 
-        <div ref={exportRef} className="student-schedule-export">
-          <div className="hidden print-only border-b border-gray-200 pb-3 mb-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-semibold text-baylor-green">
-                  Student Worker Schedules
-                </h2>
-                <div className="text-sm text-gray-600">
-                  Semester:{" "}
-                  <span className="font-semibold text-gray-900">
-                    {semesterLabel}
-                  </span>
-                </div>
-              </div>
-              <div className="text-sm text-gray-500 text-right">
-                <div>{viewLabel}</div>
-                <div>Exported {new Date().toLocaleDateString()}</div>
-              </div>
-            </div>
-            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-600">
-              <div>
-                <span className="font-semibold text-gray-900">Buildings:</span>{" "}
-                {filterSummary.buildings}
-              </div>
-              <div>
-                <span className="font-semibold text-gray-900">Job Titles:</span>{" "}
-                {filterSummary.jobs}
-              </div>
-              <div>
-                <span className="font-semibold text-gray-900">Students:</span>{" "}
-                {filterSummary.students}
-              </div>
-            </div>
-          </div>
-
+        <div>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-6 py-3 bg-gray-50 border-b border-gray-200 text-sm">
             <div className="flex items-center gap-2 text-gray-600">
               <Users size={16} className="text-baylor-green" />
@@ -799,7 +729,7 @@ const StudentSchedules = ({ embedded = false }) => {
                       return (
                         <div
                           key={student.id}
-                          className="student-schedule-card bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-md cursor-pointer"
+                          className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-md cursor-pointer"
                           style={{
                             borderLeftWidth: "4px",
                             borderLeftColor: color.border,
@@ -903,30 +833,18 @@ const StudentSchedules = ({ embedded = false }) => {
         onKeepClassic={() => answerTimelineInvite("classic")}
       />
 
-      <ExportModal
-        isOpen={isExportModalOpen}
-        onClose={() => setIsExportModalOpen(false)}
-        scheduleTableRef={exportRef}
-        title={exportTitle}
+      <StudentScheduleSignDialog
+        isOpen={isSignDialogOpen}
+        onClose={() => setIsSignDialogOpen(false)}
+        days={timelineDays}
+        jobColors={jobColors}
+        defaultTitle={defaultSignTitle(selectedBuildings)}
+        defaultSubtitle={defaultSignSubtitle({
+          semesterLabel,
+          buildings: selectedBuildings,
+          jobTitles: selectedJobTitles,
+        })}
       />
-
-      <style>{`
-        @media print {
-          @page { size: 11in 8.5in; margin: 0.35in; }
-          .student-schedule-export {
-            width: 11in;
-            min-height: 8.5in;
-            margin: 0 auto;
-            box-sizing: border-box;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          .student-schedule-card {
-            break-inside: avoid;
-            page-break-inside: avoid;
-          }
-        }
-      `}</style>
     </div>
   );
 };

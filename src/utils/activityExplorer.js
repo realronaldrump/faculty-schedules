@@ -16,6 +16,7 @@ const ACTION_LABELS = {
   room_reservation_cancelled: "Cancelled a room reservation",
   whats_new_opened: "Read What’s New",
   student_calendar_view_chosen: "Chose a student calendar view",
+  student_schedule_sign_printed: "Printed a student schedule sign",
   search_used: "Used search",
   tutorial_completed: "Completed a tutorial",
 };

@@ -46,7 +46,7 @@ export const WHATS_NEW_STORAGE_KEY = "whatsNewLastSeenVersion";
 
 export const RELEASES = [
   {
-    version: 15,
+    version: 14,
     date: "2026-10-13T20:00:00-05:00",
     title: "Student schedules: Timeline view and printable signs",
     summary:

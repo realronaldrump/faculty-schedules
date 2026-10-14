@@ -11,7 +11,7 @@ import {
 } from "../whatsNew";
 
 describe("whatsNew releases", () => {
-  it("keeps releases newest-first with unique positive integer versions", () => {
+  it("keeps releases newest-first with consecutive positive integer versions", () => {
     expect(RELEASES.length).toBeGreaterThan(0);
     const versions = RELEASES.map((release) => release.version);
     versions.forEach((version) => {
@@ -20,6 +20,12 @@ describe("whatsNew releases", () => {
     });
     expect(new Set(versions).size).toBe(versions.length);
     expect([...versions].sort((a, b) => b - a)).toEqual(versions);
+    expect(versions).toEqual(
+      Array.from(
+        { length: versions.length },
+        (_, index) => versions.length - index,
+      ),
+    );
     expect(LATEST_RELEASE).toBe(RELEASES[0]);
   });
 
@@ -42,7 +48,7 @@ describe("whatsNew releases", () => {
   });
 
   it("announces the student schedule Timeline view and printable signs", () => {
-    expect(LATEST_RELEASE.version).toBe(15);
+    expect(LATEST_RELEASE.version).toBe(14);
     expect(LATEST_RELEASE.title).toBe(
       "Student schedules: Timeline view and printable signs",
     );

@@ -19,6 +19,8 @@ import BuildingManagement from './BuildingManagement';
 import SpaceManagement from './SpaceManagement';
 
 import SelectDropdown from "../SelectDropdown";
+import { pluralize } from "../../utils/pluralize";
+
 const AppSettings = () => {
   const { availableSemesters = [], termOptions = [], refreshTerms } = useSchedules();
   const { showNotification } = useUI();
@@ -273,7 +275,7 @@ const AppSettings = () => {
       const result = await backfillTermMetadata();
       setBackfillResult(result);
       await refreshTerms?.();
-      showNotification?.('success', 'Backfill Complete', `Updated ${result.schedulesUpdated} schedules and upserted ${result.termsUpserted} semesters.`);
+      showNotification?.('success', 'Backfill Complete', `Updated ${pluralize(result.schedulesUpdated, "schedule")} and added or updated ${pluralize(result.termsUpserted, "semester")}.`);
     } catch (error) {
       console.error('Backfill error:', error);
       showNotification?.('error', 'Backfill Failed', error.message || 'Unable to backfill semesters.');
@@ -431,13 +433,13 @@ const AppSettings = () => {
       // Build notification message with cleanup details
       const details = [];
       if (report.schedulesDeleted > 0) {
-        details.push(`${report.schedulesDeleted} schedules`);
+        details.push(pluralize(report.schedulesDeleted, "schedule"));
       }
       if (report.roomsCleaned > 0) {
-        details.push(`${report.roomsCleaned} orphaned rooms`);
+        details.push(pluralize(report.roomsCleaned, "orphaned room"));
       }
       if (report.transactionsMarked > 0) {
-        details.push(`${report.transactionsMarked} import records`);
+        details.push(pluralize(report.transactionsMarked, "import record"));
       }
 
       const message = details.length > 0
@@ -520,7 +522,7 @@ const AppSettings = () => {
       await commitBatch();
       
       await logBulkUpdate(
-        `Merged ${updatedCount} courses from ${sourceTerm.term || sourceTerm.termCode} into ${targetTermData.term}`,
+        `Merged ${pluralize(updatedCount, "course")} from ${sourceTerm.term || sourceTerm.termCode} into ${targetTermData.term}`,
         COLLECTIONS.SCHEDULES,
         updatedCount,
         'AppSettings.jsx - handleMergeTerm',
@@ -529,7 +531,7 @@ const AppSettings = () => {
       
       await refreshTerms?.();
       await fetchTermCourseCounts();
-      showNotification?.('success', 'Semesters Merged', `${updatedCount} courses moved from ${sourceTerm.term || sourceTerm.termCode} to ${targetTermData.term}.`);
+      showNotification?.('success', 'Semesters Merged', `${pluralize(updatedCount, "course")} moved from ${sourceTerm.term || sourceTerm.termCode} to ${targetTermData.term}.`);
     } catch (error) {
       console.error('Error merging terms:', error);
       showNotification?.('error', 'Merge Failed', 'Could not merge the semesters.');
@@ -653,8 +655,8 @@ const AppSettings = () => {
                     disabled={saving || !selectedTerm || selectedTerm === defaultTerm}
                     className="btn-primary flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Save className="w-4 h-4 mr-2" />
-                    {saving ? 'Saving...' : 'Save Default Semester'}
+                    <Save className="w-4 h-4" />
+                    {saving ? 'Saving…' : 'Save Default Semester'}
                   </button>
                   {defaultTerm && (
                     <button
@@ -762,7 +764,7 @@ const AppSettings = () => {
                           onChange={(e) => setNewMappingSeason(e.target.value)}
                           className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
                         >
-                          <option value="">Select...</option>
+                          <option value="">Select…</option>
                           <option value="Winter">Winter</option>
                           <option value="Spring">Spring</option>
                           <option value="Summer">Summer</option>
@@ -838,8 +840,8 @@ const AppSettings = () => {
                 disabled={savingConfigs}
                 className="btn-primary flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Save className="w-4 h-4 mr-2" />
-                {savingConfigs ? 'Saving...' : 'Save Semester Settings'}
+                <Save className="w-4 h-4" />
+                {savingConfigs ? 'Saving…' : 'Save Semester Settings'}
               </button>
             </div>
           </div>
@@ -919,7 +921,7 @@ const AppSettings = () => {
                 className="btn-ghost flex items-center text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <RotateCcw size={14} className={`mr-1.5 ${isBackfilling ? 'animate-spin' : ''}`} />
-                {isBackfilling ? 'Scanning...' : 'Scan for New Semesters'}
+                {isBackfilling ? 'Scanning…' : 'Scan for New Semesters'}
               </button>
               {backfillResult && (
                 <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">
@@ -927,7 +929,7 @@ const AppSettings = () => {
                 </span>
               )}
               {loadingCounts && (
-                <span className="text-xs text-gray-500">Loading course counts...</span>
+                <span className="text-xs text-gray-500">Loading course counts…</span>
               )}
             </div>
 
@@ -949,7 +951,7 @@ const AppSettings = () => {
                   const normalizedStartDate = normalizeTermDateValue(term.startDate);
                   const normalizedEndDate = normalizeTermDateValue(term.endDate);
                   const dateRangeLabel = (normalizedStartDate && normalizedEndDate)
-                    ? `${formatTermDateLabel(normalizedStartDate)} - ${formatTermDateLabel(normalizedEndDate)}`
+                    ? `${formatTermDateLabel(normalizedStartDate)} – ${formatTermDateLabel(normalizedEndDate)}`
                     : 'Not set';
                   const dateRangeClass = (normalizedStartDate && normalizedEndDate) ? '' : 'text-gray-400';
                   const dateDraft = termCodeKey ? (termDateDrafts[termCodeKey] || {}) : {};
@@ -1066,7 +1068,7 @@ const AppSettings = () => {
                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-purple-200 text-purple-700 rounded-lg text-sm hover:bg-purple-50 disabled:opacity-50 transition-colors"
                               >
                                 <GitMerge size={14} />
-                                Merge Into...
+                                Merge Into…
                               </button>
                             )}
                             
@@ -1205,7 +1207,7 @@ const AppSettings = () => {
                       onChange={(e) => setMergeTargetTerm(e.target.value)}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
                     >
-                      <option value="">Choose a semester...</option>
+                      <option value="">Choose a semester…</option>
                       {termOptions
                         .filter(t => t.termCode !== showMergeDialog.termCode)
                         .map(t => (

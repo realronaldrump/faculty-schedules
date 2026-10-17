@@ -107,7 +107,7 @@ const JobCard = ({
     return Object.entries(groups).map(([time, days]) => {
       const [start, end] = time.split("-");
       const dayStr = days.map((d) => DAYS[d]).join(", ");
-      return `${dayStr} ${formatTime(start)}-${formatTime(end)}`;
+      return `${dayStr} ${formatTime(start)} – ${formatTime(end)}`;
     });
   };
 

@@ -56,6 +56,8 @@ import { useTutorial } from "../contexts/TutorialContext";
 import { buildCSVContent, downloadTextFile } from "../utils/csvUtils";
 
 import SelectDropdown from "./SelectDropdown";
+import { toLocalISODate } from "../utils/timeUtils";
+
 const trimValue = (value) => (typeof value === "string" ? value.trim() : value);
 
 const normalizeBuildingLabel = (value) => {
@@ -692,7 +694,7 @@ const StudentDirectory = () => {
     const csvContent = buildCSVContent(headers, rows);
     downloadTextFile(
       csvContent,
-      `student-worker-directory-${new Date().toISOString().split("T")[0]}.csv`,
+      `student-worker-directory-${toLocalISODate()}.csv`,
       "text/csv;charset=utf-8;",
     );
   };
@@ -882,10 +884,14 @@ const StudentDirectory = () => {
               size={18}
             />
             <input
-              type="text"
-              placeholder="Filter directory..."
+              type="search"
+              aria-label="Search student workers"
+              placeholder="Search directory…"
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape" && filterText) setFilterText("");
+              }}
               className="w-full pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
             />
           </div>
@@ -1005,7 +1011,7 @@ const StudentDirectory = () => {
                 onChange={(selected) =>
                   setFilters((prev) => ({ ...prev, jobTitles: selected }))
                 }
-                placeholder="Select job titles..."
+                placeholder="Select job titles…"
               />
             </div>
             <div>
@@ -1018,7 +1024,7 @@ const StudentDirectory = () => {
                 onChange={(selected) =>
                   setFilters((prev) => ({ ...prev, buildings: selected }))
                 }
-                placeholder="Select buildings..."
+                placeholder="Select buildings…"
               />
             </div>
           </div>
@@ -1101,7 +1107,8 @@ const StudentDirectory = () => {
                   setEditingStudent(student);
                 }}
                 className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full transition-colors"
-                title="Edit"
+                title={`Edit ${student.name || "student"}`}
+                aria-label={`Edit ${student.name || "student"}`}
               >
                 <Edit size={16} />
               </button>
@@ -1111,7 +1118,8 @@ const StudentDirectory = () => {
                   confirmDelete(student);
                 }}
                 className="p-2 text-red-600 hover:bg-red-100 rounded-full transition-colors"
-                title="Delete"
+                title={`Delete ${student.name || "student"}`}
+                aria-label={`Delete ${student.name || "student"}`}
               >
                 <Trash2 size={16} />
               </button>

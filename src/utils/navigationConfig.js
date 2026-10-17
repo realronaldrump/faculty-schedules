@@ -308,7 +308,7 @@ export const navigationItems = [
       },
       {
         id: "baylor-acronyms",
-        label: "Acronyms",
+        label: "Baylor Acronyms",
         path: "help/acronyms",
         canonicalId: "help/acronyms",
         description: "Common terms and abbreviations.",

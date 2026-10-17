@@ -1,9 +1,10 @@
 import { useMemo, useState, useEffect } from 'react';
 import { MapPin, Download, Printer, Clock, Calendar } from 'lucide-react';
 import CourseDetailModal from './CourseDetailModal';
-import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
+import { parseTime, formatMinutesToLabel } from '../../utils/timeUtils';
 import { getBuildingDisplay, splitMultiRoom } from '../../utils/locationService';
 import { buildCourseSectionKey } from '../../utils/courseUtils';
+import { onActivateKey } from '../../utils/keyboard';
 
 const RoomCalendarView = ({
     scheduleData,
@@ -357,7 +358,7 @@ const RoomCalendarView = ({
                                     style={{ top: `${(tick - dayStartMinutes) * pixelsPerMinute}px` }}
                                 >
                                     <span className="absolute -top-2.5 left-1 text-xs font-medium text-gray-500 bg-white px-1">
-                                        {formatMinutesToTime(tick).replace(':00', '').replace(' ', '')}
+                                        {formatMinutesToLabel(tick)}
                                     </span>
                                 </div>
                             ))}
@@ -428,15 +429,18 @@ const RoomCalendarView = ({
                                                     ? 'bg-baylor-gold text-baylor-green ring-2 ring-baylor-gold/40'
                                                     : 'bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green'
                                                     }`}
-                                                title={`${item.Course} • ${item['Start Time']} - ${item['End Time']} • ${getInstructorNames(item).join(' / ') || item.Instructor || ''}`}
+                                                title={`${item.Course} • ${item['Start Time']} – ${item['End Time']} • ${getInstructorNames(item).join(' / ') || item.Instructor || ''}`}
                                                 onClick={() => openCourseCard(item)}
+                                                role="button"
+                                                tabIndex={0}
+                                                onKeyDown={onActivateKey(() => openCourseCard(item))}
                                             >
                                                 <div className="font-bold truncate">{item.Course}</div>
                                                 <div className="truncate">
                                                     {renderInstructorButtons(item)}
                                                 </div>
                                                 <div className="text-[0.65rem] opacity-80">
-                                                    {item['Start Time']} - {item['End Time']}
+                                                    {item['Start Time']} – {item['End Time']}
                                                 </div>
                                                 {pattern && (
                                                     <div className="text-[0.65rem] opacity-80 font-medium">

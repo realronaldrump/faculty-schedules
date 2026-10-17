@@ -46,7 +46,7 @@ const AccountStatusScreen = () => {
             onClick={handleSignOut}
             disabled={signingOut}
           >
-            Sign out
+            Sign Out
           </button>
         </div>
       </div>

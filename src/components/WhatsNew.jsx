@@ -94,23 +94,25 @@ export const WhatsNewModal = ({ isOpen, releases, onClose }) => (
             {release.title}
           </h3>
           <p className="mt-1 text-sm text-gray-600">{release.summary}</p>
-          <ul className="mt-4 space-y-4">
-            {release.highlights.map((highlight) => (
-              <li key={highlight.title} className="flex gap-3">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-baylor-green/10">
-                  <highlight.icon className="h-4 w-4 text-baylor-green" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-900">
-                    {highlight.title}
-                  </p>
-                  <p className="mt-0.5 text-sm leading-relaxed text-gray-600">
-                    {highlight.description}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
+          {release.highlights.length > 0 && (
+            <ul className="mt-4 space-y-4">
+              {release.highlights.map((highlight) => (
+                <li key={highlight.title} className="flex gap-3">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-baylor-green/10">
+                    <highlight.icon className="h-4 w-4 text-baylor-green" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-900">
+                      {highlight.title}
+                    </p>
+                    <p className="mt-0.5 text-sm leading-relaxed text-gray-600">
+                      {highlight.description}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </article>
       ))}
     </div>

@@ -460,7 +460,7 @@ const StudentEditModal = ({
       isOpen
       onClose={isSaving ? undefined : onClose}
       closeOnEsc={!isSaving}
-      closeOnOverlayClick={!isSaving}
+      closeOnOverlayClick={false}
       size="xl"
       showClose={false}
       bodyClassName="flex flex-col"

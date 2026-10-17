@@ -104,7 +104,7 @@ const SectionTable = ({ title, description, rows, onSelect, dataTutorial }) => {
     <h3 className="text-base font-semibold text-gray-900">{title}</h3>
     <p className="text-sm text-gray-600 mb-3">{description}</p>
     {rows.length === 0 ? (
-      <p className="text-sm text-gray-500">Nothing flagged. 🎉</p>
+      <p className="text-sm text-gray-500">Nothing flagged.</p>
     ) : (
       <div className="overflow-x-auto rounded-lg border border-gray-200">
         <table className="university-table min-w-full">

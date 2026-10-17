@@ -23,7 +23,14 @@ import {
   getCanonicalBuildingList,
   splitMultiRoom,
 } from "../../utils/locationService";
-import { parseTime, formatMinutesToTime } from "../../utils/timeUtils";
+import {
+  parseTime,
+  formatMinutesToLabel,
+  formatTimeRange,
+  formatDuration,
+  toLocalISODate,
+} from "../../utils/timeUtils";
+import { pluralize } from "../../utils/pluralize";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import { useTutorial } from "../../contexts/TutorialContext";
@@ -33,6 +40,7 @@ import { parseTermDate } from "../../utils/termUtils";
 import { downloadCSVFile } from "../../utils/csvUtils";
 
 import SelectDropdown from "../SelectDropdown";
+import { onActivateKey } from "../../utils/keyboard";
 const RoomSchedules = ({ embedded = false }) => {
   const { scheduleData = [], facultyData = [], allFacultyData = [] } = useData();
   const { loadPeople } = usePeople();
@@ -79,6 +87,8 @@ const RoomSchedules = ({ embedded = false }) => {
     return now.getHours() * 60 + now.getMinutes();
   });
   const [selectedCourseForModal, setSelectedCourseForModal] = useState(null);
+  const isSelectedDateToday =
+    toLocalISODate(selectedDate) === toLocalISODate(new Date());
   const facultyLookupData = allFacultyData.length > 0 ? allFacultyData : facultyData;
 
   const dayNames = {
@@ -421,7 +431,7 @@ const RoomSchedules = ({ embedded = false }) => {
     });
 
     downloadCSVFile(
-      `${roomPart}${buildingPart}-${weekViewMode}-${semester}-${new Date().toISOString().split("T")[0]}.csv`,
+      `${roomPart}${buildingPart}-${weekViewMode}-${semester}-${toLocalISODate()}.csv`,
       csvData[0],
       csvData.slice(1),
     );
@@ -436,18 +446,33 @@ const RoomSchedules = ({ embedded = false }) => {
 
   // Timeline view component
   const TimelineView = () => {
-    const dayStart = 8 * 60; // 8:00 AM
-    const dayEnd = 18 * 60; // 6:00 PM
+    // 8 AM–6 PM, widened to the hour so early and evening classes stay on the grid.
+    let dayStart = 8 * 60;
+    let dayEnd = 18 * 60;
+    visibleRooms.forEach((room) => {
+      (dailyRoomSchedules[room] || []).forEach((item) => {
+        const start = parseTime(item["Start Time"]);
+        const end = parseTime(item["End Time"]);
+        if (start === null || end === null || end <= start) return;
+        dayStart = Math.min(dayStart, Math.floor(start / 60) * 60);
+        dayEnd = Math.max(dayEnd, Math.ceil(end / 60) * 60);
+      });
+    });
     const totalMinutes = dayEnd - dayStart;
     const timeLabels = Array.from(
       { length: (dayEnd - dayStart) / 60 + 1 },
       (_, i) => dayStart + i * 60,
     );
     const rowHeight = density === "compact" ? "52px" : "72px";
+    const showNow =
+      isSelectedDateToday && nowMinutes >= dayStart && nowMinutes <= dayEnd;
 
     return (
       <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">
-        <div className="relative min-w-[800px]">
+        <div
+          className="relative"
+          style={{ minWidth: `${160 + (totalMinutes / 60) * 64}px` }}
+        >
           {/* Timeline Header */}
           <div className="flex sticky top-0 bg-white z-10 border-b-2 border-baylor-green">
             <div className="w-40 flex-shrink-0 font-serif font-semibold p-3 text-baylor-green border-r border-gray-200">
@@ -460,7 +485,7 @@ const RoomSchedules = ({ embedded = false }) => {
                   style={{ width: `${(60 / totalMinutes) * 100}%` }}
                   className="text-center text-xs font-medium p-2 border-l border-gray-200 text-baylor-green"
                 >
-                  {formatMinutesToTime(time).replace(":00", "")}
+                  {formatMinutesToLabel(time)}
                 </div>
               ))}
             </div>
@@ -476,7 +501,7 @@ const RoomSchedules = ({ embedded = false }) => {
               <div className="w-40 flex-shrink-0 font-medium p-3 text-sm text-baylor-green border-r border-gray-200">
                 <div className="font-semibold">{room}</div>
                 <div className="text-xs text-gray-500">
-                  {roomStats[room]?.sessions || 0} sessions •{" "}
+                  {pluralize(roomStats[room]?.sessions || 0, "session")} •{" "}
                   {(roomStats[room]?.hours || 0).toFixed(1)}h
                 </div>
                 <div className="mt-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
@@ -500,8 +525,8 @@ const RoomSchedules = ({ embedded = false }) => {
                     className="absolute top-0 bottom-0 w-px bg-gray-200"
                   ></div>
                 ))}
-                {/* Current time indicator */}
-                {nowMinutes >= dayStart && nowMinutes <= dayEnd && (
+                {/* Current time indicator (today only) */}
+                {showNow && (
                   <div
                     className="absolute top-0 bottom-0 w-0.5 bg-red-500/70"
                     style={{
@@ -517,13 +542,17 @@ const RoomSchedules = ({ embedded = false }) => {
                   if (start === null || end === null || end <= start)
                     return null;
 
-                  const left = Math.max(
-                    0,
-                    ((start - dayStart) / totalMinutes) * 100,
-                  );
-                  const width = ((end - start) / totalMinutes) * 100;
-
-                  if (end < dayStart || start > dayEnd) return null;
+                  const visibleStart = Math.max(start, dayStart);
+                  const visibleEnd = Math.min(end, dayEnd);
+                  if (visibleEnd <= visibleStart) return null;
+                  const left =
+                    ((visibleStart - dayStart) / totalMinutes) * 100;
+                  const width =
+                    ((visibleEnd - visibleStart) / totalMinutes) * 100;
+                  const inSession =
+                    isSelectedDateToday &&
+                    nowMinutes >= start &&
+                    nowMinutes <= end;
 
                   return (
                     <div
@@ -535,9 +564,12 @@ const RoomSchedules = ({ embedded = false }) => {
                         top: density === "compact" ? "4px" : "6px",
                         bottom: density === "compact" ? "4px" : "6px",
                       }}
-                      className={`px-2 py-1 overflow-hidden text-left text-white text-xs rounded-md shadow-sm transition-all cursor-pointer group ${nowMinutes >= start && nowMinutes <= end ? "bg-baylor-gold text-baylor-green ring-2 ring-baylor-gold/40" : "bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green"}`}
-                      title={`${item.Course} • ${item.Instructor || ''} • ${formatMinutesToTime(start)} - ${formatMinutesToTime(end)}`}
+                      className={`px-2 py-1 overflow-hidden text-left text-white text-xs rounded-md shadow-sm transition-all cursor-pointer group ${inSession ? "bg-baylor-gold text-baylor-green ring-2 ring-baylor-gold/40" : "bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green"}`}
+                      title={`${item.Course} • ${item.Instructor || ''} • ${formatTimeRange(start, end)}`}
                       onClick={() => openCourseCard(item, room)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={onActivateKey(() => openCourseCard(item, room))}
                     >
                       <div className="font-bold truncate">{item.Course}</div>
                       <button
@@ -555,8 +587,7 @@ const RoomSchedules = ({ embedded = false }) => {
                         {item.Instructor}
                       </button>
                       <div className="text-xs opacity-75">
-                        {formatMinutesToTime(start)} -{" "}
-                        {formatMinutesToTime(end)}
+                        {formatTimeRange(start, end)}
                       </div>
                     </div>
                   );
@@ -584,7 +615,7 @@ const RoomSchedules = ({ embedded = false }) => {
                 {room}
               </h3>
               <div className="text-sm text-gray-600">
-                {roomStats[room]?.sessions || 0} sessions •{" "}
+                {pluralize(roomStats[room]?.sessions || 0, "session")} •{" "}
                 {(roomStats[room]?.hours || 0).toFixed(1)} hours •{" "}
                 {(roomStats[room]?.utilization || 0).toFixed(0)}% utilization
               </div>
@@ -627,17 +658,25 @@ const RoomSchedules = ({ embedded = false }) => {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="font-semibold text-baylor-green">
-                        {session["Start Time"]} - {session["End Time"]}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {(() => {
-                          const start = parseTime(session["Start Time"]);
-                          const end = parseTime(session["End Time"]);
-                          const duration = end - start;
-                          return `${Math.floor(duration / 60)}h ${duration % 60}m`;
-                        })()}
-                      </div>
+                      {(() => {
+                        const start = parseTime(session["Start Time"]);
+                        const end = parseTime(session["End Time"]);
+                        const timed = start !== null && end !== null;
+                        return (
+                          <>
+                            <div className="font-semibold text-baylor-green">
+                              {timed
+                                ? formatTimeRange(start, end)
+                                : `${session["Start Time"]} – ${session["End Time"]}`}
+                            </div>
+                            {timed && (
+                              <div className="text-sm text-gray-500">
+                                {formatDuration(end - start)}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 ))}
@@ -749,7 +788,7 @@ const RoomSchedules = ({ embedded = false }) => {
               <div className="flex items-center gap-3">
                 <input
                   type="date"
-                  value={selectedDate.toISOString().split("T")[0]}
+                  value={toLocalISODate(selectedDate)}
                   onChange={(e) =>
                     setSelectedDate(new Date(e.target.value.replace(/-/g, "/")))
                   }
@@ -886,20 +925,26 @@ const RoomSchedules = ({ embedded = false }) => {
             </div>
           </div>
 
-          {/* Row 3: Only-in-use, Density, Sort, Week View Mode */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
+          {/* Row 3: Only-in-use, Density, Sort, Week View Mode
+              (wraps instead of squeezing, so controls never overlap) */}
+          <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
             {/* Only In Use Toggle */}
             <div
-              className="flex items-center gap-3"
+              className="flex min-h-11 items-center gap-3"
               data-tutorial="only-in-use-toggle"
             >
-              <label className="text-sm font-medium text-gray-700">
+              <span
+                id="only-rooms-in-use-label"
+                className="text-sm font-medium text-gray-700"
+              >
                 Only rooms in use
-              </label>
+              </span>
               <button
+                type="button"
                 onClick={() => setShowOnlyInUse((v) => !v)}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${showOnlyInUse ? "bg-baylor-green" : "bg-gray-300"}`}
                 aria-pressed={showOnlyInUse}
+                aria-labelledby="only-rooms-in-use-label"
               >
                 <span
                   className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${showOnlyInUse ? "translate-x-5" : "translate-x-1"}`}
@@ -909,12 +954,12 @@ const RoomSchedules = ({ embedded = false }) => {
 
             {/* Density Toggle */}
             <div
-              className="flex items-center gap-2"
+              className="flex min-h-11 items-center gap-2"
               data-tutorial="density-toggle"
             >
-              <label className="text-sm font-medium text-gray-700">
+              <span className="text-sm font-medium text-gray-700">
                 Density
-              </label>
+              </span>
               <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
                 <button
                   onClick={() => setDensity("comfortable")}
@@ -932,50 +977,38 @@ const RoomSchedules = ({ embedded = false }) => {
             </div>
 
             {/* Sort */}
-            <div className="flex-1 max-w-full" data-tutorial="sort-by">
+            <div className="w-64 max-w-full" data-tutorial="sort-by">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Sort By
               </label>
-              <div className="relative">
-                <ArrowUpDown
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                  size={16}
-                />
-                <SelectDropdown
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white"
-                >
-                  <option value="room">Room (A–Z)</option>
-                  <option value="sessions">Sessions (High → Low)</option>
-                  <option value="utilization">Utilization (High → Low)</option>
-                </SelectDropdown>
-              </div>
+              <SelectDropdown
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                leadingIcon={<ArrowUpDown className="h-4 w-4 text-gray-400" />}
+              >
+                <option value="room">Room (A–Z)</option>
+                <option value="sessions">Sessions (High → Low)</option>
+                <option value="utilization">Utilization (High → Low)</option>
+              </SelectDropdown>
             </div>
 
             {/* Week View Mode (only show when in week view) */}
             {viewMode === "week" && (
-              <div className="flex-1 max-w-full">
+              <div className="w-48 max-w-full">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Week Pattern
                 </label>
-                <div className="relative">
-                  <Calendar
-                    className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                    size={16}
-                  />
-                  <SelectDropdown
-                    value={weekViewMode}
-                    onChange={(e) => setWeekViewMode(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white"
-                  >
-                    <option value="all">All Days</option>
-                    <option value="mwf">MWF</option>
-                    <option value="tr">TR</option>
-                    <option value="mw">MW</option>
-                    <option value="trf">TRF</option>
-                  </SelectDropdown>
-                </div>
+                <SelectDropdown
+                  value={weekViewMode}
+                  onChange={(e) => setWeekViewMode(e.target.value)}
+                  leadingIcon={<Calendar className="h-4 w-4 text-gray-400" />}
+                >
+                  <option value="all">All Days</option>
+                  <option value="mwf">MWF</option>
+                  <option value="tr">TR</option>
+                  <option value="mw">MW</option>
+                  <option value="trf">TRF</option>
+                </SelectDropdown>
               </div>
             )}
           </div>

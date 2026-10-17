@@ -467,7 +467,7 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
             </h2>
           ) : (
             <h1 className="text-2xl font-bold text-gray-900 mb-1">
-              Student Worker Payroll
+              Student Worker Analytics
             </h1>
           )}
           <p className="text-gray-600">
@@ -525,7 +525,7 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
                   type="text"
                   value={searchText}
                   onChange={(event) => setSearchText(event.target.value)}
-                  placeholder="Search students, jobs, supervisors..."
+                  placeholder="Search students, jobs, supervisors…"
                   className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green transition-colors"
                 />
               </div>
@@ -603,7 +603,7 @@ const StudentWorkerAnalytics = ({ embedded = false }) => {
                 onClick={handleResetFilters}
                 className="px-4 py-2 text-sm text-baylor-green font-medium rounded-lg border border-baylor-green/30 hover:bg-baylor-green/10 transition-colors"
               >
-                Reset all filters
+                Reset All Filters
               </button>
             </div>
           </div>

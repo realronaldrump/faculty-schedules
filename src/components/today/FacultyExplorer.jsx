@@ -29,6 +29,7 @@ import { getActiveFacultyList } from "../../utils/facultyFinderUtils";
 import FacultyStatusBadge from "./FacultyStatusBadge";
 
 import SelectDropdown from "../SelectDropdown";
+import { onActivateKey } from "../../utils/keyboard";
 const QuickStats = ({ stats, isWeekend }) => {
   if (isWeekend) {
     return (
@@ -53,9 +54,9 @@ const QuickStats = ({ stats, isWeekend }) => {
         </span>
       </div>
       <div className="flex items-center gap-2">
-        <div className="w-2 h-2 bg-blue-500 rounded-full" />
+        <div className="w-2 h-2 bg-baylor-blue rounded-full" />
         <span className="text-gray-600">
-          <span className="font-semibold text-blue-600">{stats.inOffice}</span>{" "}
+          <span className="font-semibold text-baylor-blue">{stats.inOffice}</span>{" "}
           in office
         </span>
       </div>
@@ -95,6 +96,8 @@ const FacultyRow = ({ faculty, locationStatus, onSelect, isSelected }) => {
   return (
     <tr
       onClick={() => onSelect(faculty)}
+      tabIndex={0}
+      onKeyDown={onActivateKey(() => onSelect(faculty))}
       className={`cursor-pointer transition-colors ${
         isSelected
           ? "bg-baylor-green/5 border-l-2 border-baylor-green"
@@ -132,7 +135,7 @@ const FacultyRow = ({ faculty, locationStatus, onSelect, isSelected }) => {
                 ? `Conflict between:\n${conflictDetails
                     .map(
                       (c) =>
-                        `${c.course} (${c.room}) @ ${c.startTime}-${c.endTime}`,
+                        `${c.course} (${c.room}) @ ${c.startTime} – ${c.endTime}`,
                     )
                     .join("\n")}`
                 : "Schedule conflict"
@@ -200,7 +203,7 @@ const RoomCard = ({ roomData, onRoomClick }) => {
           <span className="font-medium">{occ.facultyName}</span>
           {occ.course && <span className="text-gray-400 ml-1">({occ.course})</span>}
           <div className="text-xs text-gray-400">
-            {occ.startTime} - {occ.endTime}
+            {occ.startTime} – {occ.endTime}
           </div>
         </div>
       ))}

@@ -26,6 +26,7 @@ import { useUI } from "../../contexts/UIContext";
 import { termCodeFromLabel } from "../../utils/termUtils";
 import { hashString, hashRecord } from "../../utils/hashUtils";
 import { trackAction, trackFailure } from "../../utils/activityTracking";
+import { pluralize } from "../../utils/pluralize";
 
 const PREVIEW_ROW_LIMIT = 100;
 
@@ -426,7 +427,7 @@ const ImportWizard = ({ embedded = false }) => {
       showNotification?.(
         "success",
         "Import Applied",
-        `Applied ${stats.totalChanges} changes`,
+        `Applied ${pluralize(stats.totalChanges, "change")}`,
       );
       trackAction("import_applied", {
         importType,
@@ -488,6 +489,18 @@ const ImportWizard = ({ embedded = false }) => {
     ? clssSchemaReport.unknownColumns
     : [];
   const clssHeaderMappings = Object.entries(clssSchemaReport?.headerMap || {});
+
+  // "24 schedules added · 12 people added · 9 rooms added"
+  const addedSummary = resultsSummary
+    ? [
+        [resultsSummary.schedulesAdded, "schedule", "schedules"],
+        [resultsSummary.peopleAdded, "person", "people"],
+        [resultsSummary.roomsAdded, "room", "rooms"],
+      ]
+        .filter(([count]) => count > 0)
+        .map(([count, one, many]) => `${pluralize(count, one, many)} added`)
+        .join(" · ")
+    : "";
 
   return (
     <div className="space-y-6">
@@ -592,69 +605,71 @@ const ImportWizard = ({ embedded = false }) => {
             <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700">
               {isCLSS ? (
                 <div className="space-y-3">
-                  <div className="font-semibold">
-                    CLSS schema diagnostics (profile-driven)
-                  </div>
-                  <div>
-                    Profile:{" "}
-                    <span className="font-medium">
-                      {clssSchemaReport?.profileId || "unknown"}
-                    </span>{" "}
-                    (v{clssSchemaReport?.profileVersion || "n/a"})
-                  </div>
-                  <div>
-                    Parser confidence:{" "}
-                    <span className="font-medium">
-                      {Math.round(Number(clssSchemaReport?.confidence || 0) * 100)}%
-                    </span>
-                  </div>
-                  <div>
-                    Header row index:{" "}
-                    <span className="font-medium">
-                      {clssSchemaReport?.headerRowIndex ?? "n/a"}
-                    </span>
-                  </div>
+                  {clssMissingRequired.length === 0 ? (
+                    <div className="flex items-start gap-2 text-green-800">
+                      <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>
+                        All required columns found ({clssHeaderMappings.length}{" "}
+                        columns recognized).
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2 text-red-700">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>
+                        Missing required columns: {clssMissingRequired.join(", ")}
+                      </span>
+                    </div>
+                  )}
+                  {clssUnknownColumns.length > 0 && (
+                    <div className="text-gray-600">
+                      Ignored columns: {clssUnknownColumns.join(", ")}
+                    </div>
+                  )}
 
-                  <div className="rounded-lg border border-gray-200 bg-white p-3">
-                    <div className="font-medium mb-1">Required fields status</div>
-                    {clssMissingRequired.length === 0 ? (
-                      <div className="text-green-700">
-                        All required CLSS fields are mapped.
+                  {/* Parser internals stay available for troubleshooting. */}
+                  <details className="rounded-lg border border-gray-200 bg-white">
+                    <summary className="cursor-pointer select-none px-3 py-2 font-medium text-gray-700">
+                      Technical details
+                    </summary>
+                    <div className="space-y-2 border-t border-gray-100 px-3 py-3 text-xs sm:text-sm">
+                      <div>
+                        Profile:{" "}
+                        <span className="font-medium">
+                          {clssSchemaReport?.profileId || "unknown"}
+                        </span>{" "}
+                        (v{clssSchemaReport?.profileVersion || "n/a"})
                       </div>
-                    ) : (
-                      <div className="text-red-700">
-                        Missing required fields: {clssMissingRequired.join(", ")}
+                      <div>
+                        Parser confidence:{" "}
+                        <span className="font-medium">
+                          {Math.round(Number(clssSchemaReport?.confidence || 0) * 100)}%
+                        </span>
                       </div>
-                    )}
-                  </div>
-
-                  <div className="rounded-lg border border-gray-200 bg-white p-3">
-                    <div className="font-medium mb-1">Unknown extra columns</div>
-                    {clssUnknownColumns.length === 0 ? (
-                      <div className="text-gray-600">None</div>
-                    ) : (
-                      <div className="text-gray-700">
-                        {clssUnknownColumns.join(", ")}
+                      <div>
+                        Header row index:{" "}
+                        <span className="font-medium">
+                          {clssSchemaReport?.headerRowIndex ?? "n/a"}
+                        </span>
                       </div>
-                    )}
-                  </div>
-
-                  <div className="rounded-lg border border-gray-200 bg-white p-3">
-                    <div className="font-medium mb-1">Effective header mapping</div>
-                    {clssHeaderMappings.length === 0 ? (
-                      <div className="text-gray-600">No mapped headers detected.</div>
-                    ) : (
-                      <div className="space-y-1">
-                        {clssHeaderMappings.map(([fieldId, header]) => (
-                          <div key={fieldId} className="text-xs sm:text-sm">
-                            <span className="font-mono">{fieldId}</span>
-                            {" → "}
-                            <span className="font-medium">{header}</span>
+                      <div>
+                        <div className="font-medium mb-1">Column mapping</div>
+                        {clssHeaderMappings.length === 0 ? (
+                          <div className="text-gray-600">No mapped headers detected.</div>
+                        ) : (
+                          <div className="space-y-1">
+                            {clssHeaderMappings.map(([fieldId, header]) => (
+                              <div key={fieldId}>
+                                <span className="font-mono">{fieldId}</span>
+                                {" → "}
+                                <span className="font-medium">{header}</span>
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        )}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  </details>
                 </div>
               ) : (
                 <div className="flex items-center space-x-2">
@@ -704,7 +719,11 @@ const ImportWizard = ({ embedded = false }) => {
                           return (
                             <td
                               key={header}
-                              className="table-cell text-gray-800 whitespace-pre-wrap break-words align-top"
+                              className={`table-cell text-gray-800 align-top ${
+                                display.length <= 24 || display.includes("\n")
+                                  ? "whitespace-pre"
+                                  : "min-w-[12rem] whitespace-pre-wrap break-words"
+                              }`}
                             >
                               {display}
                             </td>
@@ -751,7 +770,7 @@ const ImportWizard = ({ embedded = false }) => {
               disabled={!validateDetected() || isProcessing}
               className="px-6 py-3 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90 disabled:opacity-50"
             >
-              {isProcessing ? "Generating Preview..." : "Generate Preview"}
+              {isProcessing ? "Generating Preview…" : "Generate Preview"}
             </button>
           </div>
         </div>
@@ -759,102 +778,107 @@ const ImportWizard = ({ embedded = false }) => {
 
       {step === 4 && resultsSummary && (
         <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <div className="text-lg font-semibold text-gray-900 mb-2">
+          <div className="flex items-center gap-2 text-lg font-semibold text-gray-900 mb-2">
+            <CheckCircle className="h-5 w-5 text-green-700" />
             Import Complete
           </div>
           <div className="text-gray-700">
-            Applied {resultsSummary.total} changes to{" "}
-            {resultsSummary.semester || "selected semester"}.
+            Applied {pluralize(resultsSummary.total, "change")} to{" "}
+            {resultsSummary.semester || "the selected semester"}.
           </div>
-          <div className="mt-4 flex items-center space-x-3">
+          {addedSummary && (
+            <div className="mt-1 text-sm text-gray-600">{addedSummary}</div>
+          )}
+          <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
               onClick={() => {
                 setHistoryTransactionId("");
                 setShowHistory(true);
               }}
-              className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center space-x-2"
+              className="btn-secondary"
             >
               <History className="w-4 h-4" />
-              <span>View Import History</span>
+              View Import History
             </button>
-            <button
-              onClick={resetWizard}
-              className="px-4 py-2 bg-baylor-green text-white rounded-lg hover:bg-baylor-green/90"
-            >
+            <button onClick={resetWizard} className="btn-primary">
               Import Another File
             </button>
           </div>
-          <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
-            <div className="text-sm font-semibold text-blue-950">
-              Entity resolution and cleanup preview completed
+
+          {/* Cleanup and integrity reports stay available for troubleshooting. */}
+          <details className="mt-4 rounded-lg border border-gray-200 bg-gray-50">
+            <summary className="cursor-pointer select-none px-4 py-2 text-sm font-medium text-gray-700">
+              Technical details
+            </summary>
+            <div className="space-y-4 border-t border-gray-200 px-4 py-3 text-sm text-gray-700">
+              <div>
+                <div className="font-medium text-gray-900">
+                  Entity resolution and cleanup
+                </div>
+                <div className="mt-1 space-y-1">
+                  <div>
+                    Person creates matched to existing records:{" "}
+                    {resultsSummary?.entityResolutionReport?.personCreatesMatchedExisting || 0}
+                  </div>
+                  <div>
+                    Deterministic person records created:{" "}
+                    {resultsSummary?.entityResolutionReport?.deterministicPersonCreates || 0}
+                  </div>
+                  <div>
+                    Course records upserted:{" "}
+                    {resultsSummary?.entityResolutionReport?.courseUpserts || 0}
+                  </div>
+                  <div>
+                    People duplicate candidates found:{" "}
+                    {resultsSummary?.entityCleanupReport?.peopleDuplicatesWouldMerge || 0}
+                  </div>
+                  <div>
+                    Room duplicate candidates found:{" "}
+                    {resultsSummary?.entityCleanupReport?.roomDuplicatesWouldMerge || 0}
+                  </div>
+                </div>
+              </div>
+              {importType === "schedule" && (
+                <div>
+                  <div className="font-medium text-gray-900">
+                    Post-import integrity finalization
+                  </div>
+                  <div className="mt-1 space-y-1">
+                    <div>
+                      Rooms created: {resultsSummary?.integrityFinalizeReport?.roomsCreated || 0}
+                    </div>
+                    <div>
+                      Schedule space links repaired: {resultsSummary?.integrityFinalizeReport?.spaceLinkRepairs?.schedulesUpdated || 0}
+                    </div>
+                    <div>
+                      Cross-list links updated: {resultsSummary?.integrityFinalizeReport?.crossListAutoLink?.schedulesUpdated || 0}
+                    </div>
+                    <div>
+                      High-confidence duplicates merged: {resultsSummary?.integrityFinalizeReport?.scheduleDuplicatesMerged || 0}
+                    </div>
+                    <div>
+                      Excluded rows: {resultsSummary?.exclusionSummary?.excludedRowCount || 0}
+                    </div>
+                  </div>
+                </div>
+              )}
+              <pre className="text-xs bg-white border border-gray-200 rounded-lg p-3 overflow-x-auto">
+                {JSON.stringify(
+                  {
+                    exclusionSummary: resultsSummary.exclusionSummary || null,
+                    integrityFinalizeReport:
+                      resultsSummary.integrityFinalizeReport || null,
+                    entityResolutionReport:
+                      resultsSummary.entityResolutionReport || null,
+                    entityCleanupReport:
+                      resultsSummary.entityCleanupReport || null,
+                  },
+                  null,
+                  2,
+                )}
+              </pre>
             </div>
-            <div className="mt-2 text-sm text-blue-950 space-y-1">
-              <div>
-                Person creates matched to existing records:{" "}
-                {resultsSummary?.entityResolutionReport?.personCreatesMatchedExisting || 0}
-              </div>
-              <div>
-                Deterministic person records created:{" "}
-                {resultsSummary?.entityResolutionReport?.deterministicPersonCreates || 0}
-              </div>
-              <div>
-                Course records upserted:{" "}
-                {resultsSummary?.entityResolutionReport?.courseUpserts || 0}
-              </div>
-              <div>
-                People duplicate candidates found:{" "}
-                {resultsSummary?.entityCleanupReport?.peopleDuplicatesWouldMerge || 0}
-              </div>
-              <div>
-                Room duplicate candidates found:{" "}
-                {resultsSummary?.entityCleanupReport?.roomDuplicatesWouldMerge || 0}
-              </div>
-            </div>
-          </div>
-          {importType === "schedule" && (
-            <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4">
-              <div className="text-sm font-semibold text-green-900">
-                Post-import integrity finalization applied
-              </div>
-              <div className="mt-2 text-sm text-green-900 space-y-1">
-                <div>
-                  Rooms created: {resultsSummary?.integrityFinalizeReport?.roomsCreated || 0}
-                </div>
-                <div>
-                  Schedule space links repaired: {resultsSummary?.integrityFinalizeReport?.spaceLinkRepairs?.schedulesUpdated || 0}
-                </div>
-                <div>
-                  Cross-list links updated: {resultsSummary?.integrityFinalizeReport?.crossListAutoLink?.schedulesUpdated || 0}
-                </div>
-                <div>
-                  High-confidence duplicates merged: {resultsSummary?.integrityFinalizeReport?.scheduleDuplicatesMerged || 0}
-                </div>
-                <div>
-                  Excluded rows: {resultsSummary?.exclusionSummary?.excludedRowCount || 0}
-                </div>
-              </div>
-              <details className="mt-3">
-                <summary className="cursor-pointer text-xs font-medium text-green-800">
-                  Technical details
-                </summary>
-                <pre className="mt-2 text-xs bg-white border border-green-100 rounded-lg p-3 overflow-x-auto text-green-900">
-                  {JSON.stringify(
-                    {
-                      exclusionSummary: resultsSummary.exclusionSummary || null,
-                      integrityFinalizeReport:
-                        resultsSummary.integrityFinalizeReport || null,
-                      entityResolutionReport:
-                        resultsSummary.entityResolutionReport || null,
-                      entityCleanupReport:
-                        resultsSummary.entityCleanupReport || null,
-                    },
-                    null,
-                    2,
-                  )}
-                </pre>
-              </details>
-            </div>
-          )}
+          </details>
         </div>
       )}
 

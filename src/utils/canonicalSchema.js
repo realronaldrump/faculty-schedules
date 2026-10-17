@@ -272,7 +272,7 @@ export const validateSpace = (space) => {
   }
 
   if (!space.buildingId && space.buildingCode) {
-    warnings.push("Space is missing buildingId (optional but recommended)");
+    warnings.push("Building is not set up under Facilities › Buildings yet (optional)");
   }
 
   // Check type

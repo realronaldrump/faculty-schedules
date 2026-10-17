@@ -1,18 +1,20 @@
 import { memo, useCallback, useMemo, useState } from "react";
 import { FixedSizeList as List } from "react-window";
 import { AutoSizer } from "react-virtualized-auto-sizer";
-import { Search, Filter, ChevronsUpDown, Download, Loader2 } from "lucide-react";
+import { Search, Filter, ChevronDown, ChevronUp, ChevronsUpDown, Download, Loader2 } from "lucide-react";
 import MultiSelectDropdown from "../MultiSelectDropdown";
 import FacultyContactCard from "../FacultyContactCard";
 import CourseDetailModal from "../scheduling/CourseDetailModal";
 import { parseCourseCode } from "../../utils/courseUtils";
-import { parseTime } from "../../utils/timeUtils";
+import { parseTime, toLocalISODate } from "../../utils/timeUtils";
 import { getBuildingDisplay, splitMultiRoom } from "../../utils/locationService";
 import { getMaxEnrollment } from "../../utils/enrollmentUtils";
 import { useData } from "../../contexts/DataContext";
 import { useAppConfig } from "../../contexts/AppConfigContext";
 import ResponsiveTableScroll from "../shared/ResponsiveTableScroll";
 import { buildCSVContent, downloadTextFile } from "../../utils/csvUtils";
+import { pluralize } from "../../utils/pluralize";
+import { onActivateKey } from "../../utils/keyboard";
 
 const COURSE_ROW_HEIGHT = 58;
 const COURSE_TABLE_MAX_HEIGHT = 560;
@@ -27,7 +29,7 @@ const formatInstructorDisplay = (item) =>
 const formatCourseTime = (item) => {
   const startTime = item?.["Start Time"] || "";
   const endTime = item?.["End Time"] || "";
-  if (startTime && endTime) return `${startTime} - ${endTime}`;
+  if (startTime && endTime) return `${startTime} – ${endTime}`;
   return startTime || endTime || "—";
 };
 
@@ -47,6 +49,8 @@ const CourseTableRow = memo(({ index, style, data }) => {
       style={{ ...style, gridTemplateColumns: COURSE_GRID_TEMPLATE }}
       className="grid cursor-pointer items-center border-b border-gray-100 bg-white text-sm transition-colors hover:bg-gray-50"
       onClick={() => data.onSelect(item)}
+      tabIndex={0}
+      onKeyDown={onActivateKey(() => data.onSelect(item))}
     >
       <div role="cell" className="px-4 py-3 font-medium text-baylor-green">
         {item.Course || "—"}
@@ -434,7 +438,7 @@ const CourseBrowser = ({ embedded = false }) => {
       ]);
       downloadTextFile(
         buildCSVContent(headers, rows),
-        `course-browse-${new Date().toISOString().split("T")[0]}.csv`,
+        `course-browse-${toLocalISODate()}.csv`,
         "text/csv;charset=utf-8;",
       );
     } finally {
@@ -471,10 +475,13 @@ const CourseBrowser = ({ embedded = false }) => {
         className="flex items-center gap-1 text-left hover:text-baylor-green/80 transition-colors"
       >
         {label}
-        <ChevronsUpDown
-          size={14}
-          className={`text-gray-400 ${sortConfig.key === sortKey ? "text-baylor-green" : ""}`}
-        />
+        {sortConfig.key !== sortKey ? (
+          <ChevronsUpDown size={14} className="text-gray-400" />
+        ) : sortConfig.direction === "ascending" ? (
+          <ChevronUp size={14} className="text-baylor-green" />
+        ) : (
+          <ChevronDown size={14} className="text-baylor-green" />
+        )}
       </button>
     </div>
   );
@@ -495,7 +502,7 @@ const CourseBrowser = ({ embedded = false }) => {
 
       {/* Search and Filters */}
       <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex flex-col gap-4 2xl:flex-row">
           {/* Search Input */}
           <div className="flex-1 relative">
             <Search
@@ -503,8 +510,9 @@ const CourseBrowser = ({ embedded = false }) => {
               size={18}
             />
             <input
-              type="text"
-              placeholder="Search by course, title, CRN, or instructor..."
+              type="search"
+              aria-label="Search courses"
+              placeholder="Search by course, title, CRN, or instructor…"
               value={filters.searchTerm}
               onChange={(e) =>
                 setFilters((prev) => ({ ...prev, searchTerm: e.target.value }))
@@ -547,7 +555,7 @@ const CourseBrowser = ({ embedded = false }) => {
               }
               placeholder="All Programs"
             />
-            <div className="flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-1.5 bg-white">
+            <div className="flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus-within:border-baylor-green focus-within:ring-2 focus-within:ring-baylor-green/20">
               <span className="text-xs text-gray-500 whitespace-nowrap">
                 Max Enroll
               </span>
@@ -586,14 +594,15 @@ const CourseBrowser = ({ embedded = false }) => {
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
           {hasActiveFilters && <Filter size={14} className="text-gray-500" />}
           <span className="text-gray-600">
-            Showing {sortedData.length} of {groupedScheduleData.length} courses
+            Showing {sortedData.length.toLocaleString()} of{" "}
+            {pluralize(groupedScheduleData.length, "course")}
           </span>
           {hasActiveFilters && (
             <button
               onClick={clearFilters}
               className="text-baylor-green hover:underline ml-2"
             >
-              Clear filters
+              Clear Filters
             </button>
           )}
           <button
@@ -606,7 +615,7 @@ const CourseBrowser = ({ embedded = false }) => {
             ) : (
               <Download size={14} />
             )}
-            {isCsvExporting ? "Preparing CSV..." : "Export CSV"}
+            {isCsvExporting ? "Preparing CSV…" : "Export CSV"}
           </button>
         </div>
       </div>
@@ -665,13 +674,6 @@ const CourseBrowser = ({ embedded = false }) => {
           </div>
         </ResponsiveTableScroll>
 
-        {/* Results count footer */}
-        {sortedData.length > 0 && (
-          <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 text-sm text-gray-600">
-            Showing {sortedData.length} course
-            {sortedData.length !== 1 ? "s" : ""}
-          </div>
-        )}
       </div>
 
       {/* Course Detail Modal */}

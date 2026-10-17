@@ -7,6 +7,7 @@ import {
   Search,
   Star,
   Trash2,
+  Loader2,
 } from "lucide-react";
 
 import Badge from "../../shared/Badge";
@@ -178,7 +179,7 @@ const ScheduleGridLibraryModal = ({
 
           {isLoading && templates.length === 0 ? (
             <div className="flex min-h-64 items-center justify-center text-gray-500">
-              <RefreshCw className="mr-3 h-5 w-5 animate-spin" />
+              <Loader2 className="mr-3 h-5 w-5 animate-spin text-baylor-green" />
               Loading your schedule templates…
             </div>
           ) : filteredTemplates.length === 0 ? (
@@ -275,7 +276,7 @@ const ScheduleGridLibraryModal = ({
                               className="btn-ghost px-2 py-1 text-xs"
                               aria-label={`Duplicate ${studio.name}`}
                             >
-                              <Copy className="mr-1 h-3.5 w-3.5" />
+                              <Copy className="h-3.5 w-3.5" />
                               Copy
                             </button>
                             <button
@@ -284,7 +285,7 @@ const ScheduleGridLibraryModal = ({
                               className="btn-ghost px-2 py-1 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
                               aria-label={`Delete ${studio.name}`}
                             >
-                              <Trash2 className="mr-1 h-3.5 w-3.5" />
+                              <Trash2 className="h-3.5 w-3.5" />
                               Delete
                             </button>
                             <button

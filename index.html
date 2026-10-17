@@ -12,12 +12,9 @@
   <!-- Baylor University Branding -->
   <title>HSD Dashboard | Baylor University</title>
 
-  <!-- Adobe Fonts: Calluna -->
+  <!-- Adobe Fonts: Calluna (font files are fetched cross-origin) -->
+  <link rel="preconnect" href="https://use.typekit.net" crossorigin>
   <link rel="stylesheet" href="https://use.typekit.net/ymh8ltu.css">
-
-  <!-- Professional Font Loading -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
   <!-- Security and Performance -->
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
@@ -42,11 +39,11 @@
       z-index: 9999;
       color: white;
       font-family: "calluna", serif;
+      transition: opacity 0.3s ease, visibility 0s linear 0.3s;
     }
 
     .loading-content {
       text-align: center;
-      animation: fadeIn 0.8s ease-in-out;
     }
 
     .loading-logo {
@@ -86,18 +83,6 @@
       margin: 0 auto;
     }
 
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-        transform: translateY(20px);
-      }
-
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
     @keyframes pulse {
 
       0%,
@@ -120,9 +105,11 @@
       }
     }
 
-    /* Hide loading screen once app loads */
+    /* Fade out once the app knows who is signed in (set in main.jsx) */
     .app-loaded #loading-screen {
-      display: none;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
     }
   </style>
 </head>
@@ -135,7 +122,7 @@
         <span style="font-size: 16px; font-weight: bold;">HSD</span>
       </div>
       <div class="loading-text">HSD Dashboard</div>
-      <div class="loading-subtitle">Baylor University - Human Sciences & Design</div>
+      <div class="loading-subtitle">Baylor University – Human Sciences &amp; Design</div>
       <div class="loading-spinner"></div>
     </div>
   </div>
@@ -146,15 +133,6 @@
   <!-- Application Script -->
   <script type="module" src="/src/main.jsx"></script>
 
-  <!-- Remove loading screen once React loads -->
-  <script>
-    // Hide loading screen once React app is ready
-    window.addEventListener('load', () => {
-      setTimeout(() => {
-        document.body.classList.add('app-loaded');
-      }, 500);
-    });
-  </script>
 </body>
 
 </html>

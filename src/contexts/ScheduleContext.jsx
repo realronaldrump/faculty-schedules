@@ -7,7 +7,7 @@
  * - Managing available semesters
  */
 
-import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { fetchSchedulesByTerm } from '../utils/dataImportUtils';
@@ -131,36 +131,45 @@ export const ScheduleProvider = ({ children }) => {
             setSelectedSemester(fallback);
         }
     }, [availableSemesters, activeTermByDate, adminDefaultTerm, selectedSemester]);
-    // Load schedules when selectedSemester changes
-    const loadSchedules = useCallback(async (termLabel) => {
+    const latestLoadRef = useRef(0);
+
+    // Load schedules when selectedSemester changes. A background reload (after a
+    // save or import) keeps the current page on screen instead of swapping it for
+    // the full-page loader, which would unmount it and lose its state.
+    const loadSchedules = useCallback(async (termLabel, { background = false } = {}) => {
         if (!termLabel) {
             setRawScheduleData([]);
             return;
         }
-        setLoading(true);
+        const loadId = ++latestLoadRef.current;
+        if (!background) setLoading(true);
         setError(null);
         try {
             const termMeta = getTermByLabel(termLabel);
-            // console.log(`📅 Loading schedules for ${termLabel}...`);
             const { schedules } = await fetchSchedulesByTerm({
                 term: termLabel,
                 termCode: termMeta?.termCode || ''
             });
-            setRawScheduleData(schedules);
-            // console.log(`✅ Loaded ${schedules.length} schedules.`);
+            if (loadId === latestLoadRef.current) setRawScheduleData(schedules);
         } catch (err) {
             console.error('❌ Error loading schedules:', err);
-            setRawScheduleData([]);
-            setError(err.message);
+            if (loadId === latestLoadRef.current) {
+                if (!background) setRawScheduleData([]);
+                setError(err.message);
+            }
         } finally {
-            setLoading(false);
+            if (loadId === latestLoadRef.current) setLoading(false);
         }
     }, [getTermByLabel]);
 
+    // Only a semester switch shows the full-page loader. When term metadata
+    // refreshes (which recreates loadSchedules) the reload runs in the background.
+    const loadedSemesterRef = useRef(null);
     useEffect(() => {
-        if (selectedSemester) {
-            loadSchedules(selectedSemester);
-        }
+        if (!selectedSemester) return;
+        const isNewSemester = loadedSemesterRef.current !== selectedSemester;
+        loadedSemesterRef.current = selectedSemester;
+        loadSchedules(selectedSemester, { background: !isNewSemester });
     }, [selectedSemester, loadSchedules]);
 
 
@@ -176,7 +185,7 @@ export const ScheduleProvider = ({ children }) => {
         setIncludeArchived,
         selectedTermMeta,
         getTermByLabel,
-        refreshSchedules: () => loadSchedules(selectedSemester),
+        refreshSchedules: () => loadSchedules(selectedSemester, { background: true }),
         refreshTerms
     }), [
         rawScheduleData,

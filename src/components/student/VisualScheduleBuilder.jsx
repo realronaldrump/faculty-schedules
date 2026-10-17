@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { Clock, X, Trash2, Plus } from "lucide-react";
-import { formatMinutesToTime } from "../../utils/timeUtils";
+import { formatMinutesToTime, formatMinutesToLabel } from "../../utils/timeUtils";
 import {
   normalizeScheduleDay,
   normalizeScheduleTime,
@@ -232,8 +232,7 @@ const VisualScheduleBuilder = ({
     return formatMinutesToTime(minutes);
   };
 
-  const formatHourLabel = (hour) =>
-    formatMinutesToTime(hour * 60).replace(":00", "");
+  const formatHourLabel = (hour) => formatMinutesToLabel(hour * 60);
 
   // Remove a specific entry
   const removeEntry = (entryToRemove) => {
@@ -389,7 +388,7 @@ const VisualScheduleBuilder = ({
                         onClick={() => toggleSlot(day.key, hour)}
                         onMouseEnter={() => setHoveredSlot({ day: day.key, hour })}
                         onMouseLeave={() => setHoveredSlot(null)}
-                        title={`${day.full} ${formatMinutesToTime(hour * 60)} - ${formatMinutesToTime((hour + 1) * 60)}`}
+                        title={`${day.full} ${formatMinutesToTime(hour * 60)} – ${formatMinutesToTime((hour + 1) * 60)}`}
                       />
                     );
                   })}
@@ -506,7 +505,7 @@ const VisualScheduleBuilder = ({
                       <span className="font-medium">{dayInfo?.label}</span>
                       <span className="text-gray-400">|</span>
                       <span>
-                        {formatTime(entry.start)} - {formatTime(entry.end)}
+                        {formatTime(entry.start)} – {formatTime(entry.end)}
                       </span>
                       <button
                         onClick={() => removeEntry(entry)}

@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { MapPin, Download, Printer } from 'lucide-react';
 import CourseDetailModal from './CourseDetailModal';
-import { parseTime, formatMinutesToTime } from '../../utils/timeUtils';
+import { parseTime, formatMinutesToLabel, formatTimeRange } from '../../utils/timeUtils';
 import { getBuildingDisplay, splitMultiRoom } from '../../utils/locationService';
 import { useAppConfig } from '../../contexts/AppConfigContext';
+import { onActivateKey } from '../../utils/keyboard';
 
 const WeekView = ({
   scheduleData,
@@ -415,7 +416,7 @@ const WeekView = ({
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="text-sm text-gray-600">Time Range</div>
           <div className="text-2xl font-bold text-baylor-green">
-            {formatMinutesToTime(dayStartMinutes)} - {formatMinutesToTime(latestEndMinutes)}
+            {formatTimeRange(dayStartMinutes, latestEndMinutes)}
           </div>
         </div>
       </div>
@@ -439,7 +440,7 @@ const WeekView = ({
                       <div key={`time-${tick}`} className="absolute w-full" style={{ top: `${(tick - dayStartMinutes) * pixelsPerMinute}px`, height: `${60 * pixelsPerMinute}px` }}>
                         <div className="relative top-[-0.75em] text-center">
                           <span className="text-xs font-medium text-gray-500 bg-white px-1">
-                            {formatMinutesToTime(tick).replace(':00', '').replace(' ', '')}
+                            {formatMinutesToLabel(tick)}
                           </span>
                         </div>
                         <div className="border-b border-gray-100 h-full"></div>
@@ -497,15 +498,18 @@ const WeekView = ({
                                     ? 'bg-baylor-gold text-baylor-green ring-2 ring-baylor-gold/40'
                                     : 'bg-baylor-green hover:bg-baylor-gold hover:text-baylor-green'
                                   }`}
-                                title={`${item.Course} • ${item['Start Time']} - ${item['End Time']} • ${pattern}`}
+                                title={`${item.Course} • ${item['Start Time']} – ${item['End Time']} • ${pattern}`}
                                 onClick={() => openCourseCard(item)}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={onActivateKey(() => openCourseCard(item))}
                               >
                                 <div className="font-bold truncate">{item.Course}</div>
                                 <div className="truncate">
                                   {renderInstructorButtons(item)}
                                 </div>
                                 <div className="text-[0.7rem] opacity-80">
-                                  {item['Start Time']} - {item['End Time']}
+                                  {item['Start Time']} – {item['End Time']}
                                 </div>
                                 {pattern && (
                                   <div className="text-[0.7rem] opacity-80 font-medium">

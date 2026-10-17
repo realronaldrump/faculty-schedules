@@ -17,3 +17,13 @@
   visible one; reproduce the user's exact record before declaring a save bug fixed.
 - **Resumable tutorials must handle closed UI.** Saved progress can point at a step whose
   target only exists inside a window that is no longer open; recovery must offer a way back.
+
+## Oct 2026 — UI polish review setup
+
+- **Keep verification setup basic.** When another session's emulators collided with mine, I
+  built a parallel stack (custom ports, scratch Vite config, temporary launch.json entry) and
+  the user stopped it. Ask instead, then use the documented procedure (default emulator
+  ports, `dev-emulators` launch config, REST seeding) once the ports are free.
+- **Broad read-only audits run on Haiku.** Fan-out audit subagents use `model: "haiku"` with
+  step-by-step checks (exact greps, required file:line + quoted code); verify their claims
+  before reporting them.

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { User, Calendar, Clock, Search, ChevronsUpDown } from "lucide-react";
 import FacultyContactCard from "../FacultyContactCard";
-import { parseTime, formatMinutesToTime } from "../../utils/timeUtils";
+import { parseTime, formatTimeRange, formatDuration } from "../../utils/timeUtils";
 import { getLocationDisplay } from "../../utils/locationService";
 import { useData } from "../../contexts/DataContext";
 import { useSchedules } from "../../contexts/ScheduleContext";
@@ -182,7 +182,7 @@ const IndividualAvailability = ({ embedded = false }) => {
         className="app-dropdown-trigger"
       >
         <span className="block truncate text-left">
-          {selectedIndividual || "Choose a faculty member..."}
+          {selectedIndividual || "Choose a faculty member…"}
         </span>
         <ChevronsUpDown
           className={`w-5 h-5 text-baylor-green transition-transform ${isDropdownOpen ? "transform rotate-180" : ""}`}
@@ -200,9 +200,10 @@ const IndividualAvailability = ({ embedded = false }) => {
               />
               <input
                 type="text"
-                placeholder="Search faculty..."
+                placeholder="Search faculty…"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                autoFocus
                 className="app-dropdown-search pl-9"
                 onClick={(e) => e.stopPropagation()}
               />
@@ -267,12 +268,10 @@ const IndividualAvailability = ({ embedded = false }) => {
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="font-semibold text-baylor-green">
-                        {formatMinutesToTime(period.start)} -{" "}
-                        {formatMinutesToTime(period.end)}
+                        {formatTimeRange(period.start, period.end)}
                       </div>
                       <div className="text-xs text-gray-500 bg-white rounded px-2 py-1">
-                        {Math.floor((period.end - period.start) / 60)}h{" "}
-                        {(period.end - period.start) % 60}m
+                        {formatDuration(period.end - period.start)}
                       </div>
                     </div>
                     <div className="text-sm font-medium text-baylor-green/90 mb-1">
@@ -308,11 +307,10 @@ const IndividualAvailability = ({ embedded = false }) => {
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="font-semibold text-baylor-green">
-                        {formatMinutesToTime(slot.start)} -{" "}
-                        {formatMinutesToTime(slot.end)}
+                        {formatTimeRange(slot.start, slot.end)}
                       </div>
                       <div className="text-xs text-gray-500 bg-white rounded px-2 py-1">
-                        {Math.floor(slot.duration / 60)}h {slot.duration % 60}m
+                        {formatDuration(slot.duration)}
                       </div>
                     </div>
                     <div className="text-sm text-baylor-green/80">

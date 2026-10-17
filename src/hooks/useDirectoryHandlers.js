@@ -1,6 +1,12 @@
 import { useCallback } from 'react';
 import { trackFailure } from '../utils/activityTracking';
 
+const INLINE_INPUT_MIN_WIDTH = {
+    email: 'min-w-[13rem]',
+    phone: 'min-w-[7.5rem]',
+    jobTitle: 'min-w-[9rem]',
+};
+
 const enforceAdjunctTenureRule = (record) => {
     if (!record?.isAdjunct) return record;
     return { ...record, isTenured: false };
@@ -250,7 +256,9 @@ function useDirectoryHandlers({
 
     // Input class helper
     const getInputClass = useCallback((fieldName) => {
-        const baseClass = "w-full p-1 border rounded bg-baylor-gold/10";
+        // Inline row inputs keep a usable width; the table scrolls sideways instead.
+        const minWidth = INLINE_INPUT_MIN_WIDTH[fieldName] || "";
+        const baseClass = `w-full p-1 border rounded bg-baylor-gold/10 ${minWidth}`;
         return errors[fieldName] ? `${baseClass} border-red-500` : `${baseClass} border-baylor-gold`;
     }, [errors]);
 

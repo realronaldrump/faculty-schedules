@@ -10,6 +10,7 @@ import {
   buildDirectoryFilterOptions,
   dedupeDirectoryRecords,
   formatPhoneNumber,
+  getPhoneHref,
   resolveOfficeDetails
 } from '../../utils/directoryUtils';
 import { resolveOfficeLocations } from '../../utils/spaceUtils';
@@ -167,7 +168,18 @@ const buildBaseColumns = ({
     key: 'email',
     label: 'Email',
     headerClassName: 'w-[15%]',
-    render: (person) => person.email || '-',
+    render: (person) =>
+      person.email ? (
+        <a
+          href={`mailto:${person.email}`}
+          className="text-inherit hover:text-baylor-green hover:underline"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {person.email}
+        </a>
+      ) : (
+        '-'
+      ),
     renderEdit: () => (
       <div>
         <input
@@ -176,6 +188,7 @@ const buildBaseColumns = ({
           onChange={handleChange}
           className={getInputClass('email')}
           placeholder="email@baylor.edu"
+          type="email"
         />
         {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
       </div>
@@ -188,6 +201,7 @@ const buildBaseColumns = ({
           onChange={handleCreateChange}
           className={getInputClass('email')}
           placeholder="email@baylor.edu"
+          type="email"
         />
         {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
       </div>
@@ -205,6 +219,14 @@ const buildBaseColumns = ({
             <PhoneOff size={14} />
             No phone
           </span>
+        ) : getPhoneHref(person.phone) ? (
+          <a
+            href={getPhoneHref(person.phone)}
+            className="whitespace-nowrap text-inherit hover:text-baylor-green hover:underline"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {formatPhoneNumber(person.phone)}
+          </a>
         ) : (
           formatPhoneNumber(person.phone)
         )}
@@ -219,6 +241,7 @@ const buildBaseColumns = ({
             onChange={handleChange}
             className={getInputClass('phone')}
             placeholder="10 digits"
+            inputMode="tel"
             maxLength="10"
             disabled={editFormData.hasNoPhone}
           />
@@ -243,6 +266,7 @@ const buildBaseColumns = ({
             onChange={handleCreateChange}
             className={getInputClass('phone')}
             placeholder="10 digits"
+            inputMode="tel"
             maxLength="10"
             disabled={newRecord.hasNoPhone}
           />
@@ -345,12 +369,12 @@ const buildBaseColumns = ({
                     hasNoOffice: cleaned.length > 0 ? false : prev.hasNoOffice,
                   }));
                 }}
-                placeholder="Select office(s)..."
+                placeholder="Select office(s)…"
                 displayMap={resolvedSpacePicker.displayMap}
                 showSelectedLabels
                 menuPortal
                 enableSearch
-                searchPlaceholder="Search spaces..."
+                searchPlaceholder="Search spaces…"
                 disabled={editFormData.hasNoOffice}
               />
               <div className="text-2xs text-gray-500 mt-1">
@@ -408,12 +432,12 @@ const buildBaseColumns = ({
                     hasNoOffice: cleaned.length > 0 ? false : prev.hasNoOffice,
                   }));
                 }}
-                placeholder="Select office(s)..."
+                placeholder="Select office(s)…"
                 displayMap={resolvedSpacePicker.displayMap}
                 showSelectedLabels
                 menuPortal
                 enableSearch
-                searchPlaceholder="Search spaces..."
+                searchPlaceholder="Search spaces…"
                 disabled={newRecord.hasNoOffice}
               />
               <div className="text-2xs text-gray-500 mt-1">
@@ -767,12 +791,16 @@ const ConfiguredPersonDirectory = (props) => {
           <button
             onClick={handleSave}
             className="p-2 text-green-600 hover:bg-green-100 rounded-full"
+            title="Save changes"
+            aria-label="Save changes"
           >
             <Save size={16} />
           </button>
           <button
             onClick={handleCancel}
             className="p-2 text-red-600 hover:bg-red-100 rounded-full"
+            title="Cancel editing"
+            aria-label="Cancel editing"
           >
             <X size={16} />
           </button>
@@ -785,12 +813,16 @@ const ConfiguredPersonDirectory = (props) => {
         <button
           onClick={(event) => { event.stopPropagation(); handleEdit(record); }}
           className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
+          title={`Edit ${record.name || 'person'}`}
+          aria-label={`Edit ${record.name || 'person'}`}
         >
           <Edit size={16} />
         </button>
         <button
           onClick={(event) => { event.stopPropagation(); handleDelete(record); }}
           className="p-2 text-red-600 hover:bg-red-100 rounded-full"
+          title={`Delete ${record.name || 'person'}`}
+          aria-label={`Delete ${record.name || 'person'}`}
         >
           <Trash2 size={16} />
         </button>
@@ -803,12 +835,16 @@ const ConfiguredPersonDirectory = (props) => {
       <button
         onClick={handleCreateSave}
         className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
+        title="Save new person"
+        aria-label="Save new person"
       >
         <Save size={16} />
       </button>
       <button
         onClick={handleCancelCreate}
         className="p-2 text-red-600 hover:bg-red-100 rounded-full"
+        title="Cancel"
+        aria-label="Cancel adding person"
       >
         <X size={16} />
       </button>

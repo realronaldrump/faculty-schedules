@@ -14,7 +14,7 @@ const MultiSelectDropdown = ({
   menuMaxHeight = 240,
   menuMinWidth,
   enableSearch = false,
-  searchPlaceholder = 'Search...',
+  searchPlaceholder = 'Search…',
   disabled = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);

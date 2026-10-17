@@ -8,11 +8,21 @@ import {
   EyeOff,
   Check,
   AlertTriangle,
-  Database
+  Database,
+  Loader2,
 } from 'lucide-react';
 import { usePeople } from '../../contexts/PeopleContext';
 import { buildGroupedChanges } from '../../utils/import/transaction-model';
 import { getBlockingPreprocessErrors } from '../../utils/importValidationUtils';
+import { pluralize } from '../../utils/pluralize';
+
+const RECORD_NOUNS = {
+  rooms: ['room', 'rooms'],
+  schedules: ['schedule', 'schedules'],
+  people: ['person', 'people'],
+  courses: ['course', 'courses'],
+  terms: ['semester', 'semesters'],
+};
 
 const INTERNAL_SCHEDULE_DIFF_KEYS = new Set([
   'identityKey',
@@ -200,6 +210,21 @@ const ImportPreviewModal = ({
     [validationWarnings]
   );
 
+  // "rooms (buildingCode): message" repeated per record reads as one line with a count.
+  const groupedWarnings = useMemo(() => {
+    const groups = new Map();
+    displayWarnings.forEach((warn) => {
+      const match = String(warn).match(/^(\w+)(?: \([^)]*\))?: (.*)$/);
+      const collection = match ? match[1] : '';
+      const message = match ? match[2] : String(warn);
+      const key = `${collection}|${message}`;
+      const group = groups.get(key) || { collection, message, count: 0 };
+      group.count += 1;
+      groups.set(key, group);
+    });
+    return Array.from(groups.values());
+  }, [displayWarnings]);
+
   const groupedChanges = useMemo(() => {
     return buildGroupedChanges(visibleChanges);
   }, [visibleChanges]);
@@ -344,6 +369,28 @@ const ImportPreviewModal = ({
     }
   };
 
+  // New instructors with no possible match can all be created in one step.
+  const unmatchedCreatableIssues = useMemo(
+    () => matchingIssues.filter((issue) =>
+      issue.pendingPersonChangeId &&
+      !(issue.candidates?.length > 0) &&
+      !isValidMatchResolution(issue, matchResolutions[issue.id])),
+    [matchingIssues, matchResolutions]
+  );
+
+  const createAllUnmatched = () => {
+    setMatchResolutions(prev => {
+      const next = { ...prev };
+      unmatchedCreatableIssues.forEach((issue) => {
+        next[issue.id] = { action: 'create' };
+      });
+      return next;
+    });
+    const nextSelected = new Set(selectedChanges);
+    unmatchedCreatableIssues.forEach((issue) => nextSelected.add(issue.pendingPersonChangeId));
+    updateSelectedChanges(nextSelected);
+  };
+
   const clearResolution = (issue) => {
     setMatchResolutions(prev => {
       const next = { ...prev };
@@ -443,7 +490,7 @@ const ImportPreviewModal = ({
         ? data.meetingPatterns
           .map((pattern) => {
             if (pattern.day && pattern.startTime && pattern.endTime) {
-              return `${pattern.day} ${pattern.startTime}-${pattern.endTime}`;
+              return `${pattern.day} ${pattern.startTime} – ${pattern.endTime}`;
             }
             return pattern.raw || '';
           })
@@ -667,30 +714,26 @@ const ImportPreviewModal = ({
                   Preview Summary
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs text-gray-700">
-                  <div>
-                    <div className="font-semibold">{previewSummary.rowsProcessed ?? 0}</div>
-                    <div>Rows processed</div>
-                  </div>
-                  <div>
-                    <div className="font-semibold text-green-700">{previewSummary.schedulesAdded ?? 0}</div>
-                    <div>Schedules added</div>
-                  </div>
-                  <div>
-                    <div className="font-semibold text-baylor-gold">{previewSummary.schedulesUpdated ?? 0}</div>
-                    <div>Schedules updated</div>
-                  </div>
-                  <div>
-                    <div className="font-semibold text-gray-600">{previewSummary.schedulesUnchanged ?? 0}</div>
-                    <div>Schedules unchanged</div>
-                  </div>
-                  <div>
-                    <div className="font-semibold text-red-600">{previewSummary.rowsSkipped ?? 0}</div>
-                    <div>Rows skipped</div>
-                  </div>
+                  {[
+                    { label: 'Rows processed', value: previewSummary.rowsProcessed, tone: 'text-gray-900' },
+                    { label: 'Schedules added', value: previewSummary.schedulesAdded, tone: 'text-green-700' },
+                    { label: 'Schedules updated', value: previewSummary.schedulesUpdated, tone: 'text-amber-700' },
+                    { label: 'Schedules unchanged', value: previewSummary.schedulesUnchanged, tone: 'text-gray-700' },
+                    { label: 'Rows skipped', value: previewSummary.rowsSkipped, tone: 'text-red-600' },
+                  ].map(({ label, value, tone }) => (
+                    <div key={label}>
+                      {/* Zero is neutral; color only marks counts that need a look. */}
+                      <div className={`text-sm font-semibold ${value > 0 ? tone : 'text-gray-400'}`}>
+                        {(value ?? 0).toLocaleString()}
+                      </div>
+                      <div>{label}</div>
+                    </div>
+                  ))}
                 </div>
                 {previewSummary.schedulesMetadataOnly > 0 && (
                   <div className="mt-2 text-xs text-gray-500">
-                    {previewSummary.schedulesMetadataOnly} schedule update{previewSummary.schedulesMetadataOnly === 1 ? '' : 's'} are internal-only changes.
+                    {pluralize(previewSummary.schedulesMetadataOnly, 'schedule update')}{' '}
+                    {previewSummary.schedulesMetadataOnly === 1 ? 'is' : 'are'} internal only.
                   </div>
                 )}
               </div>
@@ -757,8 +800,15 @@ const ImportPreviewModal = ({
                 <div>
                   <div className="text-sm font-semibold text-yellow-700 mb-2">Warnings</div>
                   <ul className="list-disc list-inside text-sm text-yellow-700 space-y-1">
-                    {displayWarnings.map((warn, idx) => (
-                      <li key={`warn-${idx}`}>{warn}</li>
+                    {groupedWarnings.map(({ collection, message, count }) => (
+                      <li key={`${collection}-${message}`}>
+                        {message}
+                        {collection && (
+                          <span className="text-yellow-600">
+                            {' — '}{pluralize(count, RECORD_NOUNS[collection]?.[0] || 'record', RECORD_NOUNS[collection]?.[1] || 'records')}
+                          </span>
+                        )}
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -775,12 +825,23 @@ const ImportPreviewModal = ({
                     Each issue must be resolved as link, create, or exclude before commit.
                   </p>
                 </div>
-                {unresolvedMatchCount > 0 && (
-                  <div className="flex items-center space-x-2 text-sm text-red-600">
-                    <AlertTriangle className="w-4 h-4" />
-                    <span>{unresolvedMatchCount} unresolved</span>
-                  </div>
-                )}
+                <div className="flex flex-col items-end gap-2">
+                  {unresolvedMatchCount > 0 && (
+                    <div className="flex items-center space-x-2 text-sm text-red-600">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span>{unresolvedMatchCount.toLocaleString()} unresolved</span>
+                    </div>
+                  )}
+                  {unmatchedCreatableIssues.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={createAllUnmatched}
+                      className="text-sm px-3 py-2 border border-baylor-green text-baylor-green rounded-md hover:bg-baylor-green/5"
+                    >
+                      Create {pluralize(unmatchedCreatableIssues.length, 'New Person', 'New People')}
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-4">
@@ -897,7 +958,7 @@ const ImportPreviewModal = ({
                           type="text"
                           value={searchTerm}
                           onChange={(e) => setMatchSearchTerms(prev => ({ ...prev, [issue.id]: e.target.value }))}
-                          placeholder="Search by name, email, or Baylor ID..."
+                          placeholder="Search by name, email, or Baylor ID…"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                         />
                         {normalizedSearch.length >= 2 && (
@@ -1107,7 +1168,7 @@ const ImportPreviewModal = ({
               <div className="flex items-center space-x-2 text-sm text-gray-600">
                 <AlertTriangle className="w-4 h-4" />
                 <span>
-                  Changes will be applied to the database with automatic integrity finalization.
+                  Selected changes are saved, then related records are checked and tidied automatically.
                   {excludedScheduleRows > 0 ? ` ${excludedScheduleRows} row${excludedScheduleRows === 1 ? '' : 's'} will be excluded.` : ''}
                 </span>
               </div>
@@ -1132,8 +1193,8 @@ const ImportPreviewModal = ({
               >
                 {isCommitting ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Applying Changes...</span>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Applying Changes…</span>
                   </>
                 ) : (
                   <>

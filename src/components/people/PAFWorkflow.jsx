@@ -272,7 +272,7 @@ const PAFWorkflow = ({ embedded = false }) => {
               />
               <input
                 type="text"
-                placeholder="Search by name, email, or Baylor ID..."
+                placeholder="Search by name, email, or Baylor ID…"
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
                 className="w-full md:w-80 pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"

@@ -93,7 +93,7 @@ const CourseDetailModal = ({ item, pattern, room, building, onClose, onShowConta
             </div>
             <div>
               <div className="text-xs text-gray-500">Time</div>
-              <div className="text-gray-800">{item?.['Start Time']} - {item?.['End Time']}</div>
+              <div className="text-gray-800">{item?.['Start Time']} – {item?.['End Time']}</div>
             </div>
             <div>
               <div className="text-xs text-gray-500">Room</div>

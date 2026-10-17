@@ -208,7 +208,7 @@ const ScheduleClassPickerModal = ({
               disabled={selectedOptions.length === 0}
               className="btn-primary"
             >
-              <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+              <Plus className="h-4 w-4" aria-hidden="true" />
               Add {selectedOptions.length || "selected"}
             </button>
           </div>
@@ -250,9 +250,9 @@ const ScheduleClassPickerModal = ({
               className="btn-secondary shrink-0"
             >
               {isLoading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Layers3 className="mr-2 h-4 w-4" />
+                <Layers3 className="h-4 w-4" />
               )}
               {isLoading ? "Loading…" : "Load semester"}
             </button>

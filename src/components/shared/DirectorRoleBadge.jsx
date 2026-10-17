@@ -14,7 +14,7 @@ import {
  */
 const ROLE_TONES = {
   [DIRECTOR_ROLES.UPD]: "bg-amber-100 text-amber-800 border-amber-200",
-  [DIRECTOR_ROLES.GPD]: "bg-sky-100 text-sky-800 border-sky-200",
+  [DIRECTOR_ROLES.GPD]: "bg-baylor-blue/10 text-baylor-blue border-baylor-blue/20",
 };
 
 const DirectorRoleBadge = ({ role, programName = "", className = "" }) => {

@@ -2,10 +2,11 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { Calendar, Clock, ChevronsUpDown, X, Eye, Info, Building, Users, GraduationCap } from "lucide-react";
 import FacultyContactCard from "../FacultyContactCard";
 import Modal from "../shared/Modal";
-import { parseTime, formatMinutesToTime } from "../../utils/timeUtils";
+import { parseTime, formatMinutesToTime, formatMinutesToLabel, formatTimeRange } from "../../utils/timeUtils";
 import { getLocationDisplay } from "../../utils/locationService";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
+import { onActivateKey } from "../../utils/keyboard";
 
 const FacultySchedules = ({ embedded = false }) => {
   const {
@@ -296,7 +297,7 @@ const FacultySchedules = ({ embedded = false }) => {
                     style={{ width: `${(60 / totalMinutes) * 100}%` }}
                     className="text-center text-xs font-medium p-2 border-l border-gray-200 text-baylor-green"
                   >
-                    {formatMinutesToTime(time).replace(":00", "")}
+                    {formatMinutesToLabel(time)}
                   </div>
                 ))}
               </div>
@@ -364,7 +365,13 @@ const FacultySchedules = ({ embedded = false }) => {
                             setSelectedCourse({ ...course, facultyName });
                             setSelectedFacultyForCard(null); // Close faculty card if open
                           }}
-                          title={`${course.course} - ${course.title}\n${formatMinutesToTime(course.start)} - ${formatMinutesToTime(course.end)}\nRoom: ${course.room}`}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={onActivateKey(() => {
+                            setSelectedCourse({ ...course, facultyName });
+                            setSelectedFacultyForCard(null);
+                          })}
+                          title={`${course.course} - ${course.title}\n${formatTimeRange(course.start, course.end)}\nRoom: ${course.room}`}
                         >
                           <div className="font-bold truncate">
                             {course.course}
@@ -447,8 +454,7 @@ const FacultySchedules = ({ embedded = false }) => {
               <div>
                 <p className="font-semibold">Time</p>
                 <p>
-                  {formatMinutesToTime(course.start)} -{" "}
-                  {formatMinutesToTime(course.end)}
+                  {formatTimeRange(course.start, course.end)}
                 </p>
               </div>
             </div>
@@ -516,7 +522,7 @@ const FacultySchedules = ({ embedded = false }) => {
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                 className="app-dropdown-trigger"
               >
-                <span>Add faculty member...</span>
+                <span>Add faculty member…</span>
                 <ChevronsUpDown className="w-5 h-5 text-baylor-green" />
               </button>
 
@@ -525,9 +531,10 @@ const FacultySchedules = ({ embedded = false }) => {
                   <div className="p-2 border-b border-gray-200">
                     <input
                       type="text"
-                      placeholder="Search faculty..."
+                      placeholder="Search faculty…"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
+                      autoFocus
                       className="app-dropdown-search"
                     />
                   </div>
@@ -580,7 +587,7 @@ const FacultySchedules = ({ embedded = false }) => {
                 onClick={() => setIsProgramDropdownOpen(!isProgramDropdownOpen)}
                 className="app-dropdown-trigger"
               >
-                <span>Select program...</span>
+                <span>Select program…</span>
                 <GraduationCap className="w-5 h-5 text-baylor-green" />
               </button>
 
@@ -589,7 +596,7 @@ const FacultySchedules = ({ embedded = false }) => {
                   <div className="p-2 border-b border-gray-200">
                     <input
                       type="text"
-                      placeholder="Search programs..."
+                      placeholder="Search programs…"
                       value={programSearchTerm}
                       onChange={(e) => setProgramSearchTerm(e.target.value)}
                       className="app-dropdown-search"
@@ -602,7 +609,7 @@ const FacultySchedules = ({ embedded = false }) => {
                         {programSearchTerm
                           ? "No programs found matching your search."
                           : !programsLoaded
-                            ? "Loading programs..."
+                            ? "Loading programs…"
                             : !showAdjuncts
                               ? "No programs with full-time faculty available."
                               : "No programs available."}

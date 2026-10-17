@@ -216,7 +216,7 @@ const RareRepairToolsSection = ({
                 {isLoadingBaselinePreview ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Building Preview...
+                    Building Preview…
                   </>
                 ) : (
                   <>
@@ -235,7 +235,7 @@ const RareRepairToolsSection = ({
                 {isRunningBaseline ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Running...
+                    Running…
                   </>
                 ) : (
                   "Run full data refresh"
@@ -295,7 +295,7 @@ const RareRepairToolsSection = ({
                 {isLoadingTermRepairPreview ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Building Preview...
+                    Building Preview…
                   </>
                 ) : (
                   <>
@@ -314,7 +314,7 @@ const RareRepairToolsSection = ({
                 {isRunningTermRepair ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Running...
+                    Running…
                   </>
                 ) : (
                   <>
@@ -363,7 +363,7 @@ const RareRepairToolsSection = ({
                 {isLoadingLocationPreview ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading...
+                    Loading…
                   </>
                 ) : (
                   <>
@@ -382,7 +382,7 @@ const RareRepairToolsSection = ({
                 {isApplyingLocationMigration ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Applying...
+                    Applying…
                   </>
                 ) : (
                   "Update room links"
@@ -425,7 +425,7 @@ const RareRepairToolsSection = ({
                 {isLoadingDirectorMigrationPreview ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading...
+                    Loading…
                   </>
                 ) : (
                   <>
@@ -444,7 +444,7 @@ const RareRepairToolsSection = ({
                 {isApplyingDirectorMigration ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Applying...
+                    Applying…
                   </>
                 ) : (
                   "Migrate directors"
@@ -521,7 +521,7 @@ const RareRepairToolsSection = ({
                 {isLoadingBaylorIdCleanupPreview ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading...
+                    Loading…
                   </>
                 ) : (
                   <>
@@ -540,7 +540,7 @@ const RareRepairToolsSection = ({
                 {isApplyingBaylorIdCleanup ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Applying...
+                    Applying…
                   </>
                 ) : (
                   "Apply Baylor ID cleanup"
@@ -619,7 +619,7 @@ const RareRepairToolsSection = ({
                 {isScanningOrphans ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Checking...
+                    Checking…
                   </>
                 ) : (
                   <>
@@ -638,7 +638,7 @@ const RareRepairToolsSection = ({
                 {isApplyingOrphanCleanup ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Removing...
+                    Removing…
                   </>
                 ) : (
                   "Remove checked items"

@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { Building, X, Search, Plus } from "lucide-react";
+import { pluralize } from "../../utils/pluralize";
 
 /**
  * BuildingSelector - Tag-based building selection with search
@@ -11,7 +12,7 @@ const BuildingSelector = ({
   availableBuildings = [],
   selectedBuildings = [],
   onChange,
-  placeholder = "Search buildings...",
+  placeholder = "Search buildings…",
   allowCustomBuildings = true,
   maxBuildings = 10,
 }) => {
@@ -155,8 +156,8 @@ const BuildingSelector = ({
       {availableBuildings.length > 0 && (
         <p className="text-xs text-gray-500">
           {selectedBuildings.length === 0
-            ? `Type to search from ${availableBuildings.length} buildings`
-            : `${selectedBuildings.length} of ${maxBuildings} buildings selected`}
+            ? `Type to search from ${pluralize(availableBuildings.length, "building")}`
+            : `${selectedBuildings.length} of ${pluralize(maxBuildings, "building")} selected`}
         </p>
       )}
     </div>

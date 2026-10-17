@@ -275,7 +275,7 @@ const BaylorAcronyms = () => {
   };
 
   if (isLoading) {
-    return <div className="text-center p-8">Loading Acronyms...</div>;
+    return <div className="text-center p-8">Loading Acronyms…</div>;
   }
 
     return (
@@ -327,7 +327,7 @@ const BaylorAcronyms = () => {
             disabled={isSubmitting}
             className="btn-primary col-span-full lg:col-span-1"
           >
-            {isSubmitting ? "Adding..." : "Add Acronym"}
+            {isSubmitting ? "Adding…" : "Add Acronym"}
           </button>
         </div>
       </div>

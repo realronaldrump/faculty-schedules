@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App.jsx";
@@ -59,20 +59,19 @@ window.addEventListener("vite:preloadError", (event) => {
 
 window.addEventListener("load", clearStaleAssetReload, { once: true });
 
-const AuthLoadingState = () => (
-  <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-    <div className="text-center">
-      <div className="loading-shimmer w-16 h-16 rounded-full mx-auto mb-4" />
-      <p className="text-gray-600">Loading account...</p>
-    </div>
-  </div>
-);
-
 const AuthenticatedApp = () => {
   const { user, loading, isApproved } = useAuth();
 
+  // The branded splash in index.html covers the page until we know who is
+  // signed in, then fades out.
+  useEffect(() => {
+    if (!loading) {
+      document.body.classList.add("app-loaded");
+    }
+  }, [loading]);
+
   if (loading) {
-    return <AuthLoadingState />;
+    return null;
   }
 
   if (!user) {

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createStudentJobDraft, getStudentJobError } from "../utils/studentJobDrafts";
-import { parseStudentWorkerDate, toStudentWorkerDateString } from "../utils/studentWorkers";
+import { parseStudentWorkerDate } from "../utils/studentWorkers";
+import { toLocalISODate } from "../utils/timeUtils";
 
 // The containing form owns the draft, including while its JobCard is unmounted
 // by a tab change. JobCard never copies a new prop object over entered values.
@@ -37,7 +38,7 @@ export default function useStudentJobEditor(jobs, setJobs, employment) {
       index: "new",
       draft: createStudentJobDraft({
         id: crypto.randomUUID(),
-        startDate: hireDate && hireDate > new Date() ? employment.startDate : toStudentWorkerDateString(),
+        startDate: hireDate && hireDate > new Date() ? employment.startDate : toLocalISODate(),
         endDate: employment.endDate || "",
       }),
     });

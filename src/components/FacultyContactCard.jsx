@@ -16,6 +16,7 @@ import {
 import { formatTermFromCode, formatTermLabel, sortTerms } from '../utils/termUtils';
 import { resolveOfficeLocations } from '../utils/spaceUtils';
 import { parseTime } from '../utils/timeUtils';
+import { formatPhoneNumber, getPhoneHref } from '../utils/directoryUtils';
 const DAY_LABELS = Object.freeze({
     M: 'Monday',
     T: 'Tuesday',
@@ -26,18 +27,6 @@ const DAY_LABELS = Object.freeze({
     U: 'Sunday',
 });
 const DAY_ORDER = ['M', 'T', 'W', 'R', 'F', 'S', 'U'];
-
-const formatPhoneNumber = (phoneStr) => {
-    if (!phoneStr) return '-';
-    const cleaned = ('' + phoneStr).replace(/\D/g, '');
-    if (cleaned.length === 10) {
-        const match = cleaned.match(/^(\d{3})(\d{3})(\d{4})$/);
-        if (match) {
-            return `(${match[1]}) ${match[2]} - ${match[3]}`;
-        }
-    }
-    return phoneStr;
-};
 
 const normalizeValue = (value) => (value === undefined || value === null ? '' : String(value).trim());
 
@@ -80,7 +69,7 @@ const parseDayCodes = (dayValue) => {
 const formatTimeLabel = (startTime, endTime, onlineMode = '') => {
     const start = normalizeValue(startTime);
     const end = normalizeValue(endTime);
-    if (start && end) return `${start} - ${end}`;
+    if (start && end) return `${start} – ${end}`;
     if (start || end) return start || end;
     if (normalizeValue(onlineMode).toLowerCase() === 'asynchronous') {
         return 'Asynchronous';
@@ -204,6 +193,7 @@ const FacultyContactCard = ({
     const [baylorIdValue, setBaylorIdValue] = useState(getBaylorIdValue(contactPerson));
     const [baylorIdError, setBaylorIdError] = useState('');
     const [savingBaylorId, setSavingBaylorId] = useState(false);
+    const [baylorIdCopied, setBaylorIdCopied] = useState(false);
     const [expandedCourseKey, setExpandedCourseKey] = useState(null);
 
     // Keep local value in sync when opening different people
@@ -434,6 +424,21 @@ const FacultyContactCard = ({
         return '';
     };
 
+    const copyBaylorId = async () => {
+        try {
+            await navigator.clipboard.writeText(baylorIdValue);
+            setBaylorIdCopied(true);
+        } catch {
+            setBaylorIdError("Couldn't copy the Baylor ID. Select it and copy it instead.");
+        }
+    };
+
+    useEffect(() => {
+        if (!baylorIdCopied) return undefined;
+        const timer = setTimeout(() => setBaylorIdCopied(false), 1500);
+        return () => clearTimeout(timer);
+    }, [baylorIdCopied]);
+
     const saveBaylorId = async () => {
         const err = validateBaylorId(baylorIdValue);
         setBaylorIdError(err);
@@ -554,7 +559,7 @@ const FacultyContactCard = ({
                                         className={`inline-flex items-center rounded-full border px-2 py-1 text-xs font-medium ${
                                             assignment.role === DIRECTOR_ROLES.UPD
                                                 ? 'border-amber-200 bg-amber-50 text-amber-800'
-                                                : 'border-sky-200 bg-sky-50 text-sky-800'
+                                                : 'border-baylor-blue/20 bg-baylor-blue/5 text-baylor-blue'
                                         }`}
                                     >
                                         <BookOpen size={12} className="mr-1" />
@@ -607,9 +612,15 @@ const FacultyContactCard = ({
                                 <Phone size={14} className="text-baylor-green" />
                                 Phone
                             </div>
-                            <span className="text-sm font-medium text-gray-800">
-                                {contactPerson.hasNoPhone ? 'No Phone' : formatPhoneNumber(contactPerson.phone)}
-                            </span>
+                            {contactPerson.hasNoPhone ? (
+                                <span className="text-sm text-gray-500">No phone</span>
+                            ) : getPhoneHref(contactPerson.phone) ? (
+                                <a href={getPhoneHref(contactPerson.phone)} className="text-sm font-medium text-gray-800 hover:text-baylor-green hover:underline">
+                                    {formatPhoneNumber(contactPerson.phone)}
+                                </a>
+                            ) : (
+                                <span className="text-sm text-gray-500">Not specified</span>
+                            )}
                         </div>
                         <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
                             <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -643,8 +654,12 @@ const FacultyContactCard = ({
                                             setBaylorIdValue(onlyDigits);
                                             if (baylorIdError) setBaylorIdError(validateBaylorId(onlyDigits));
                                         }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && !savingBaylorId) saveBaylorId();
+                                        }}
                                         placeholder="9 digits"
                                         maxLength={9}
+                                        autoFocus
                                         className={`w-full px-3 py-2 border rounded-lg font-mono text-sm ${baylorIdError ? 'border-red-500 focus:border-red-500' : 'border-gray-300 focus:border-baylor-green'} focus:outline-none focus:ring-2 focus:ring-baylor-green/20`}
                                     />
                                     <div className="flex flex-wrap items-center gap-2">
@@ -653,7 +668,7 @@ const FacultyContactCard = ({
                                             disabled={savingBaylorId}
                                             className="px-3 py-1.5 text-xs bg-baylor-green text-white rounded-md disabled:opacity-50 hover:bg-baylor-green/90"
                                         >
-                                            {savingBaylorId ? 'Saving...' : 'Save'}
+                                            {savingBaylorId ? 'Saving…' : 'Save'}
                                         </button>
                                         <button
                                             onClick={() => { setIsEditingBaylorId(false); setBaylorIdValue(getBaylorIdValue(contactPerson)); setBaylorIdError(''); }}
@@ -669,11 +684,12 @@ const FacultyContactCard = ({
                                     <span className="text-sm font-semibold font-mono text-gray-800">{baylorIdValue || 'Not assigned'}</span>
                                     {baylorIdValue && (
                                         <button
-                                            onClick={() => navigator.clipboard.writeText(baylorIdValue)}
+                                            onClick={copyBaylorId}
                                             className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-100 text-gray-700"
                                             title="Copy Baylor ID"
+                                            aria-live="polite"
                                         >
-                                            Copy
+                                            {baylorIdCopied ? 'Copied' : 'Copy'}
                                         </button>
                                     )}
                                     <button

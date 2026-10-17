@@ -12,7 +12,6 @@ import {
   ListPlus,
   Plus,
   Redo2,
-  RotateCcw,
   Save,
   Settings2,
   SlidersHorizontal,
@@ -21,6 +20,7 @@ import {
   Undo2,
   ZoomIn,
   ZoomOut,
+  Loader2,
 } from "lucide-react";
 
 import ExportModal from "../ExportModal";
@@ -1111,7 +1111,7 @@ const ScheduleGridStudio = ({
                     className="inline-flex items-center rounded-lg bg-baylor-gold px-3 py-2 text-sm font-bold text-baylor-green shadow-sm transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isSaving ? (
-                      <RotateCcw className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
                       <Save className="mr-2 h-4 w-4" />
                     )}
@@ -1275,7 +1275,7 @@ const ScheduleGridStudio = ({
                 onClick={() => setIsClassPickerOpen(true)}
                 className="btn-primary px-3 py-2 text-xs"
               >
-                <ListPlus className="mr-1.5 h-4 w-4" />
+                <ListPlus className="h-4 w-4" />
                 From schedule
               </button>
               <button
@@ -1283,7 +1283,7 @@ const ScheduleGridStudio = ({
                 onClick={addEntry}
                 className="btn-secondary px-3 py-2 text-xs"
               >
-                <Plus className="mr-1.5 h-4 w-4" />
+                <Plus className="h-4 w-4" />
                 Blank class
               </button>
             </div>

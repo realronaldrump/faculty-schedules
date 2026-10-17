@@ -232,7 +232,7 @@ const CRNQualityTools = () => {
           className="px-6 py-3 bg-baylor-gold text-baylor-green rounded-lg hover:bg-baylor-gold/90 disabled:opacity-50 flex items-center"
         >
           {isAnalyzing ? (
-            "Analyzing..."
+            "Analyzing…"
           ) : (
             <>
               <Database className="w-4 h-4 mr-2" />
@@ -442,7 +442,7 @@ const CRNQualityTools = () => {
                 onChange={(selected) =>
                   setFilters((prev) => ({ ...prev, terms: selected }))
                 }
-                placeholder="Filter by semester..."
+                placeholder="Filter by semester…"
               />
             </div>
             <div>
@@ -455,7 +455,7 @@ const CRNQualityTools = () => {
                 onChange={(selected) =>
                   setFilters((prev) => ({ ...prev, programs: selected }))
                 }
-                placeholder="Filter by program..."
+                placeholder="Filter by program…"
               />
             </div>
             <div>
@@ -468,7 +468,7 @@ const CRNQualityTools = () => {
                 onChange={(selected) =>
                   setFilters((prev) => ({ ...prev, instructors: selected }))
                 }
-                placeholder="Filter by instructor..."
+                placeholder="Filter by instructor…"
               />
             </div>
             <div>
@@ -480,7 +480,7 @@ const CRNQualityTools = () => {
                 <input
                   type="text"
                   className="w-full py-1.5 outline-none text-sm"
-                  placeholder="Search course, section, CRN, semester..."
+                  placeholder="Search course, section, CRN, semester…"
                   value={filters.searchTerm}
                   onChange={(e) =>
                     setFilters((prev) => ({

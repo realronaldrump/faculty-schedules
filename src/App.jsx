@@ -9,13 +9,14 @@
  * Current size: ~600 lines (focused on layout, routing, and navigation)
  */
 
-import { useMemo } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useMemo } from "react";
+import { useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
 import PageRouter from "./components/app/PageRouter.jsx";
 import MaintenancePage from "./components/MaintenancePage";
 import Notification from "./components/Notification";
 import SelectDropdown from "./components/SelectDropdown";
+import ConfirmDialog from "./components/shared/ConfirmDialog";
 import TutorialOverlay from "./components/help/TutorialOverlay";
 import { WhatsNewToast, WhatsNewModal } from "./components/WhatsNew";
 
@@ -69,6 +70,7 @@ function App() {
   // Router hooks
   const location = useLocation();
   const navigate = useNavigate();
+  const navigationType = useNavigationType();
 
   // Current page from URL
   const currentPage = useMemo(() => {
@@ -88,6 +90,49 @@ function App() {
       }) || null
     );
   }, [currentPage]);
+
+  // Browser tab title: the page, then where it lives ("Browse · Rooms").
+  const pageTitle = useMemo(() => {
+    if (!activeSection || currentPage === "dashboard") return null;
+    const page = activeSection.children?.find(
+      (child) => child.path === currentPage,
+    );
+    if (!page) return activeSection.label;
+    const tabs = page.sidebarChildren || [];
+    const tabParam = new URLSearchParams(location.search).get("tab");
+    const tab =
+      tabs.find(
+        (candidate) =>
+          new URLSearchParams(candidate.path.split("?")[1] || "").get(
+            "tab",
+          ) === tabParam,
+      ) || (!tabParam ? tabs.find((candidate) => candidate.defaultForParent) : null);
+    return tab
+      ? `${tab.label} · ${page.label}`
+      : `${page.label} · ${activeSection.label}`;
+  }, [activeSection, currentPage, location.search]);
+
+  useEffect(() => {
+    document.title = pageTitle
+      ? `${pageTitle} | HSD Dashboard`
+      : "HSD Dashboard | Baylor University";
+  }, [pageTitle]);
+
+  // A new page opens at the top; Back and Forward keep the browser's position.
+  useEffect(() => {
+    if (navigationType !== "POP") {
+      window.scrollTo(0, 0);
+    }
+  }, [location.pathname, navigationType]);
+
+  useEffect(() => {
+    if (!mobileSidebarOpen) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setMobileSidebarOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [mobileSidebarOpen, setMobileSidebarOpen]);
 
   const termMetaByLabel = useMemo(() => {
     const map = new Map();
@@ -200,7 +245,7 @@ function App() {
                 handleNavigate(path);
               }}
               collapsed={false}
-              onToggleCollapse={() => {}}
+              onClose={() => setMobileSidebarOpen(false)}
               selectedSemester={selectedSemester}
               pinnedPages={pinnedPages}
               togglePinPage={togglePinPage}
@@ -237,7 +282,13 @@ function App() {
                       }`}
                     >
                       {index > 0 && (
-                        <span className="shrink-0 text-gray-400">/</span>
+                        <span
+                          className={`shrink-0 text-gray-400 ${
+                            index === arr.length - 1 ? "hidden sm:inline" : ""
+                          }`}
+                        >
+                          /
+                        </span>
                       )}
                       {crumb.path ? (
                         <button
@@ -332,15 +383,15 @@ function App() {
                 )}
               </button>
 
-              {/* Logout Button */}
+              {/* Sign Out Button */}
               <button
                 onClick={handleLogout}
                 className="btn-ghost min-w-11"
-                title="Logout"
-                aria-label="Logout"
+                title="Sign out"
+                aria-label="Sign out"
               >
                 <LogOut className="w-4 h-4" />
-                <span className="ml-2 hidden sm:inline">Logout</span>
+                <span className="hidden sm:inline">Sign Out</span>
               </button>
             </div>
           </div>
@@ -358,34 +409,15 @@ function App() {
         </main>
       </div>
 
-      {/* Logout Confirmation Modal */}
-      {showLogoutConfirm && (
-        <div className="modal-overlay">
-          <div className="modal-content max-w-md">
-            <div className="modal-header">
-              <h3 className="modal-title">Confirm Logout</h3>
-            </div>
-            <div className="modal-body">
-              <p className="text-gray-600">
-                Are you sure you want to logout? Any unsaved changes will be
-                lost.
-              </p>
-            </div>
-            <div className="modal-footer">
-              <button
-                onClick={() => setShowLogoutConfirm(false)}
-                className="btn-ghost"
-              >
-                Cancel
-              </button>
-              <button onClick={confirmLogout} className="btn-danger">
-                <LogOut className="w-4 h-4 mr-2" />
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        isOpen={showLogoutConfirm}
+        title="Sign Out"
+        message="Are you sure you want to sign out? Any unsaved changes will be lost."
+        confirmText="Sign Out"
+        icon={LogOut}
+        onConfirm={confirmLogout}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
 
       {/* What's New release notes: one-time toast + full history modal */}
       {whatsNew.showToast && (
@@ -403,6 +435,7 @@ function App() {
 
       {/* Notification */}
       <Notification
+        key={notification.id}
         show={notification.show}
         type={notification.type}
         title={notification.title}

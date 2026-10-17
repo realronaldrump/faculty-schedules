@@ -309,7 +309,7 @@ const StudentScheduleSignDialog = ({
               placeholder="All students"
               displayMap={filterOptions.studentNames}
               enableSearch
-              searchPlaceholder="Search students..."
+              searchPlaceholder="Search students…"
             />
           </section>
 

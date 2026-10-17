@@ -33,6 +33,7 @@ import {
   getTotalBlockingIssues,
   toArray,
 } from "./reportFormatters";
+import { pluralize } from "../../../utils/pluralize";
 
 const notify = (showNotification, type, title, message) => {
   showNotification?.(type, title, message);
@@ -483,7 +484,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
         showNotification,
         "success",
         "Full Data Refresh Complete",
-        `Processed ${report?.summary?.totalSchedulesProcessed || 0} schedules across all terms.`,
+        `Processed ${pluralize(report?.summary?.totalSchedulesProcessed, "schedule")} across all semesters.`,
       );
       return report;
     } catch (error) {
@@ -508,7 +509,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
         showNotification,
         "success",
         "Full Data Refresh Preview Ready",
-        `Previewed ${preview?.summary?.totalSchedulesProcessed || 0} schedules across all terms.`,
+        `Previewed ${pluralize(preview?.summary?.totalSchedulesProcessed, "schedule")} across all semesters.`,
       );
       return preview;
     } catch (error) {
@@ -638,7 +639,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
         showNotification,
         "success",
         "Room Link Update Complete",
-        `Updated ${report?.roomsUpdated || 0} rooms and ${report?.schedulesUpdated || 0} schedules.`,
+        `Updated ${pluralize(report?.roomsUpdated, "room")} and ${pluralize(report?.schedulesUpdated, "schedule")}.`,
       );
       return report;
     } catch (error) {
@@ -690,7 +691,7 @@ const useDataCleanupActions = ({ showNotification } = {}) => {
         showNotification,
         "success",
         "Director Migration Complete",
-        `Updated ${report?.applied?.programsUpdated || 0} programs and cleaned ${report?.applied?.peopleUpdated || 0} people.`,
+        `Updated ${pluralize(report?.applied?.programsUpdated, "program")} and cleaned ${pluralize(report?.applied?.peopleUpdated, "person", "people")}.`,
       );
       return report;
     } catch (error) {

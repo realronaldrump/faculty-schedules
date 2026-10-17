@@ -204,7 +204,7 @@ const DecisionReviewSection = ({
                               onClick={() => onRepairSpaceIssue(item)}
                               disabled={Boolean(pendingActionKey)}
                             >
-                              {isRepairing ? "Updating..." : "Update room link"}
+                              {isRepairing ? "Updating…" : "Update room link"}
                             </ActionButton>
                             <ActionButton
                               onClick={() => navigate("/facilities/spaces")}
@@ -278,7 +278,7 @@ const DecisionReviewSection = ({
                                     onClick={() => onMergeDuplicate(item)}
                                     disabled={Boolean(pendingActionKey)}
                                   >
-                                    {isMerging ? "Merging..." : "Yes, merge these"}
+                                    {isMerging ? "Merging…" : "Yes, merge these"}
                                   </ActionButton>
                                   <ActionButton
                                     onClick={onCancelMergeConfirmation}
@@ -291,7 +291,7 @@ const DecisionReviewSection = ({
                                     disabled={Boolean(pendingActionKey)}
                                   >
                                     {isMarkingDistinct
-                                      ? "Saving..."
+                                      ? "Saving…"
                                       : "Keep separate"}
                                   </ActionButton>
                                 </ButtonRow>
@@ -310,7 +310,7 @@ const DecisionReviewSection = ({
                                 onClick={() => onMarkDuplicateAsDistinct(item)}
                                 disabled={Boolean(pendingActionKey)}
                               >
-                                {isMarkingDistinct ? "Saving..." : "Keep separate"}
+                                {isMarkingDistinct ? "Saving…" : "Keep separate"}
                               </ActionButton>
                               <ActionButton
                                 onClick={() =>
@@ -394,7 +394,7 @@ const DecisionReviewSection = ({
                               onClick={() => onMarkConflictAsDistinct(item)}
                               disabled={Boolean(pendingActionKey)}
                             >
-                              {isMarkingDistinct ? "Saving..." : "Mark as okay"}
+                              {isMarkingDistinct ? "Saving…" : "Mark as okay"}
                             </ActionButton>
                             <ActionButton onClick={() => navigate("/courses/manage")}>
                               Open course management
@@ -459,7 +459,7 @@ const DecisionReviewSection = ({
                                 disabled={isFixingSafe}
                               >
                                 {isFixingSafe
-                                  ? "Cleaning up..."
+                                  ? "Cleaning up…"
                                   : "Clean up routine items"}
                               </ActionButton>
                             )}

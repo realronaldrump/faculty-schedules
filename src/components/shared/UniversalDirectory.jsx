@@ -23,7 +23,7 @@ const UniversalDirectory = ({
   leadingActions,
   trailingActions,
   searchNode,
-  searchPlaceholder = 'Filter directory...',
+  searchPlaceholder = 'Search directory…',
   renderBody,
   bodyTop,
   bodyBottom,
@@ -35,17 +35,34 @@ const UniversalDirectory = ({
   const showNameToggle = sortConfig && sortConfig.key === 'name' && onNameSortChange;
   const showSearch = typeof onFilterTextChange === 'function' && typeof onToggleFilters === 'function';
 
-  const resolvedCountLabel = countLabel !== undefined
+  const pluralCountLabel = countLabel !== undefined
     ? countLabel
     : (type === 'people' ? 'members' : 'records');
+  const resolvedCountLabel = count === 1 ? pluralCountLabel.replace(/s$/, '') : pluralCountLabel;
+
+  // A search or filter that matches nothing gets a one-click way back.
+  const isNarrowed = Boolean(filterText) || Boolean(showFilters);
+  const clearSearchAndFilters = () => {
+    onFilterTextChange?.('');
+    onClearFilters?.();
+  };
+  const emptyAction = count === 0 && isNarrowed && (onFilterTextChange || onClearFilters) ? (
+    <button
+      type="button"
+      onClick={clearSearchAndFilters}
+      className="text-sm font-medium text-baylor-green hover:underline"
+    >
+      Clear Search and Filters
+    </button>
+  ) : null;
 
   const TableComponent = useHtmlTable ? DirectoryTable : PeopleDataTable;
 
   return (
     <div className="space-y-6">
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
-        <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-200">
-          <h2 className="text-xl font-serif font-semibold text-baylor-green flex items-center">
+        <div className="flex flex-wrap justify-between items-center gap-x-4 gap-y-3 mb-4 pb-2 border-b border-gray-200">
+          <h2 className="text-xl font-serif font-semibold text-baylor-green flex items-center whitespace-nowrap">
             {Icon && <Icon className="mr-2 text-baylor-gold" size={20} />}
             {title || `${type[0].toUpperCase()}${type.slice(1)} Directory`} ({count}{resolvedCountLabel ? ` ${resolvedCountLabel}` : ''})
           </h2>
@@ -85,6 +102,7 @@ const UniversalDirectory = ({
                 columns={columns}
                 sortConfig={sortConfig}
                 onSort={onSort}
+                emptyAction={emptyAction}
                 {...tableProps}
               />
               {bodyBottom}

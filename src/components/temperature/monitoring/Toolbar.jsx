@@ -30,7 +30,7 @@ const Toolbar = ({
               value={selectedBuilding}
               onChange={(e) => onBuildingChange(e.target.value)}
             >
-              <option value="">Select building...</option>
+              <option value="">Select building…</option>
               {buildingOptions.map((building) => (
                 <option key={building.code} value={building.code}>
                   {building.name}

@@ -16,22 +16,28 @@ const DirectorySearchBar = ({
     onFilterTextChange,
     showFilters,
     onToggleFilters,
-    placeholder = 'Filter directory...'
+    placeholder = 'Search directory…'
 }) => {
     return (
         <div className="flex items-center gap-4">
             <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
-                    type="text"
+                    type="search"
+                    aria-label={placeholder.replace(/…$/, '')}
                     placeholder={placeholder}
                     value={filterText}
                     onChange={(e) => onFilterTextChange(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Escape' && filterText) onFilterTextChange('');
+                    }}
                     className="w-full pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green"
                 />
             </div>
             <button
+                type="button"
                 onClick={onToggleFilters}
+                aria-expanded={Boolean(showFilters)}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${showFilters
                         ? 'bg-baylor-green text-white'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'

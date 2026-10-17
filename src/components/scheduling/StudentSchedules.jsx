@@ -344,7 +344,7 @@ const StudentSchedules = ({ embedded = false }) => {
                 }}
                 className="px-4 py-2 text-sm text-baylor-green font-medium rounded-lg border border-baylor-green/30 hover:bg-baylor-green/10"
               >
-                Reset all filters
+                Reset All Filters
               </button>
             </div>
           </div>

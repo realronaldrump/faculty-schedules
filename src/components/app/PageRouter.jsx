@@ -1,4 +1,6 @@
 import { Component, Suspense, lazy } from "react";
+import { Navigate } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { trackFailure } from "../../utils/activityTracking";
 
@@ -53,23 +55,35 @@ const RoomGridGenerator = lazy(
 const AccountsPage = lazy(() => import("../administration/AccountsPage.jsx"));
 const TutorialPage = lazy(() => import("../help/TutorialPage.jsx"));
 
-const RouteLoadingState = () => (
-  <div className="flex items-center justify-center h-64">
-    <div className="text-center">
-      <div className="loading-shimmer w-16 h-16 rounded-full mx-auto mb-4" />
-      <p className="text-gray-600">Loading page...</p>
+const LoadingState = ({ label }) => (
+  <div className="flex items-center justify-center h-64" role="status">
+    <div className="flex flex-col items-center gap-3 text-gray-600">
+      <Loader2
+        className="h-8 w-8 animate-spin text-baylor-green"
+        aria-hidden="true"
+      />
+      <p>{label}</p>
     </div>
   </div>
 );
 
-const RouteLoadErrorState = () => (
+// A lazy page whose file no longer exists after a deploy fails to import; any
+// other error is a problem inside the page itself.
+const isStaleAssetError = (error) =>
+  /dynamically imported module|importing a module script failed|ChunkLoadError/i.test(
+    `${error?.name || ""} ${error?.message || ""}`,
+  );
+
+const RouteLoadErrorState = ({ staleAssets }) => (
   <div className="flex items-center justify-center h-64">
     <div className="max-w-md text-center">
       <h2 className="text-lg font-semibold text-gray-900">
-        Page update needed
+        {staleAssets ? "Page update needed" : "Something went wrong"}
       </h2>
       <p className="mt-2 text-sm text-gray-600">
-        This page could not load the latest app files. Reload to continue.
+        {staleAssets
+          ? "This page could not load the latest app files. Reload to continue."
+          : "This page ran into a problem. Reload to try again."}
       </p>
       <button
         type="button"
@@ -105,7 +119,11 @@ class RouteErrorBoundary extends Component {
 
   render() {
     if (this.state.error) {
-      return <RouteLoadErrorState />;
+      return (
+        <RouteLoadErrorState
+          staleAssets={isStaleAssetError(this.state.error)}
+        />
+      );
     }
 
     return this.props.children;
@@ -121,7 +139,7 @@ const getRouteBoundaryKey = (pageId, componentProps) => {
 
 const renderPage = (pageId, PageComponent, componentProps = {}) => (
   <RouteErrorBoundary pageId={pageId} resetKey={getRouteBoundaryKey(pageId, componentProps)}>
-    <Suspense fallback={<RouteLoadingState />}>
+    <Suspense fallback={<LoadingState label="Loading page…" />}>
       <PageComponent {...componentProps} />
     </Suspense>
   </RouteErrorBoundary>
@@ -131,14 +149,7 @@ const PageRouter = ({ currentPage, loading }) => {
   const { isOwner } = useAuth();
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="loading-shimmer w-16 h-16 rounded-full mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading system data...</p>
-        </div>
-      </div>
-    );
+    return <LoadingState label="Loading schedules…" />;
   }
 
   switch (currentPage) {
@@ -205,13 +216,17 @@ const PageRouter = ({ currentPage, loading }) => {
     case "admin/recent-changes":
       return renderPage("admin/recent-changes", RecentChangesPage);
     case "admin/user-activity":
-      return isOwner
-        ? renderPage("admin/user-activity", UserActivityPage)
-        : renderPage("dashboard", Dashboard);
+      return isOwner ? (
+        renderPage("admin/user-activity", UserActivityPage)
+      ) : (
+        <Navigate to="/dashboard" replace />
+      );
     case "admin/accounts":
-      return isOwner
-        ? renderPage("admin/accounts", AccountsPage)
-        : renderPage("dashboard", Dashboard);
+      return isOwner ? (
+        renderPage("admin/accounts", AccountsPage)
+      ) : (
+        <Navigate to="/dashboard" replace />
+      );
     case "admin/data-hygiene":
       return renderPage(
         "admin/data-hygiene",
@@ -232,7 +247,7 @@ const PageRouter = ({ currentPage, loading }) => {
         initialTab: "temperature",
       });
     default:
-      return renderPage("dashboard", Dashboard);
+      return <Navigate to="/dashboard" replace />;
   }
 };
 

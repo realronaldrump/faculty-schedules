@@ -8,7 +8,8 @@
  * HOW TO PUBLISH A RELEASE
  * 1. Prepend a new object to RELEASES (newest first) with the next integer
  *    `version`, an ISO `date` including a timezone offset (always rendered in
- *    each viewer's local time), and 2-5 plain-English highlights.
+ *    each viewer's local time), a one-sentence summary, and up to 5
+ *    plain-English highlights (a small release can have none).
  * 2. Ship it. Users get the one-time toast on their next visit, and the
  *    header Sparkles button shows an unseen dot until they open or dismiss.
  */
@@ -45,6 +46,14 @@ import {
 export const WHATS_NEW_STORAGE_KEY = "whatsNewLastSeenVersion";
 
 export const RELEASES = [
+  {
+    version: 15,
+    date: "2026-10-16T23:05:00-06:00",
+    title: "Polish throughout",
+    summary:
+      "Dozens of small refinements make pages, schedules, directories, and imports clearer and smoother.",
+    highlights: [],
+  },
   {
     version: 14,
     date: "2026-10-13T20:00:00-05:00",

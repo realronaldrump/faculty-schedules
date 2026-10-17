@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { BarChart3, Users, Clock, MapPin, BookOpen, ArrowUpDown, X, AlertTriangle } from "lucide-react";
 import FacultyContactCard from "../FacultyContactCard";
 import PageHeader from "../shared/PageHeader";
-import { parseTime, formatMinutesToTime } from "../../utils/timeUtils";
+import { parseTime, formatMinutesToTime, formatMinutesToLabel, formatTimeRange } from "../../utils/timeUtils";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import { splitMultiRoom, isSkippableLocation } from "../../utils/locationService";
@@ -108,7 +108,7 @@ const DepartmentInsights = () => {
         instructor: item.Instructor || "",
         startMinutes: start,
         endMinutes: end,
-        timeRange: `${formatMinutesToTime(start)} - ${formatMinutesToTime(end)}`,
+        timeRange: formatTimeRange(start, end),
       };
 
       roomCandidates.forEach((room) => {
@@ -499,9 +499,7 @@ const DepartmentInsights = () => {
             <div>
               <p className="text-sm font-medium text-gray-600">Peak Hour</p>
               <p className="text-3xl font-bold text-baylor-green">
-                {formatMinutesToTime(
-                  filteredHourCounts.peakHour.hour * 60,
-                ).replace(":00", "")}
+                {formatMinutesToLabel(filteredHourCounts.peakHour.hour * 60)}
               </p>
               <p className="text-sm text-gray-500">
                 {filteredHourCounts.peakHour.count} rooms in use
@@ -620,7 +618,7 @@ const DepartmentInsights = () => {
                   Hourly Room Usage
                 </div>
                 <h4 className="text-lg font-serif font-semibold text-baylor-green">
-                  {formatMinutesToTime(selectedHourPopup.hour * 60).replace(":00", "")}
+                  {formatMinutesToLabel(selectedHourPopup.hour * 60)}
                 </h4>
                 <p className="text-sm text-gray-600 mt-0.5">
                   {selectedHourPopup.items.length}{" "}

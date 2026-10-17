@@ -49,6 +49,11 @@
 
   a {
     color: var(--linkGreen);
+  }
+
+  /* Plain text links are underlined; styled links (button-like or
+     underline-on-hover) set their own decoration. */
+  a:not([class]) {
     text-decoration: underline;
     text-underline-offset: 2px;
   }
@@ -161,12 +166,9 @@
   }
 
   /* Professional Card System */
+  /* Static by default; clickable cards add their own hover:shadow-md. */
   .university-card {
     @apply bg-white rounded-xl shadow-sm border border-gray-200/80 overflow-hidden transition-all duration-200;
-  }
-
-  .university-card:hover {
-    @apply shadow-md border-gray-300/80;
   }
 
   .university-card-header {
@@ -268,12 +270,12 @@
   }
 
   .btn-danger-sm {
-    @apply inline-flex items-center justify-center px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold text-xs shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold text-xs shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
     font-family: "calluna", Georgia, serif;
   }
 
   .btn-secondary-sm {
-    @apply inline-flex items-center justify-center px-3 py-1.5 bg-gray-100 text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors font-semibold text-xs shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white text-baylor-green border border-baylor-green rounded-lg hover:bg-baylor-green/5 transition-colors font-semibold text-xs shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
     font-family: "calluna", Georgia, serif;
   }
 
@@ -419,12 +421,19 @@
     @apply text-gray-700 hover:bg-gray-100 hover:text-baylor-green;
   }
 
+  /* Section that contains the current page (its page carries the strong highlight). */
+  .nav-item-current {
+    @apply bg-baylor-green/5 text-baylor-green hover:bg-baylor-green/10;
+  }
+
   .nav-sub-item {
     @apply flex items-center px-4 py-2 text-sm rounded-lg transition-all duration-200 ml-4;
   }
 
+  /* Gold bar drawn inside the item so it stays aligned with its siblings. */
   .nav-sub-item-active {
-    @apply bg-baylor-gold/10 text-baylor-green font-medium border-l-2 border-baylor-gold -ml-6 pl-6;
+    @apply bg-baylor-gold/10 text-baylor-green font-medium;
+    box-shadow: inset 2px 0 0 0 #ffb81c;
   }
 
   .nav-sub-item-inactive {
@@ -517,8 +526,10 @@
   }
 
   /* Notification System */
+  /* Sits just below the header (one row from lg up, two rows below) so it never
+     covers the semester picker or Sign Out. */
   .notification {
-    @apply fixed top-4 right-4 z-50 max-w-sm bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden;
+    @apply fixed top-36 lg:top-24 right-4 z-50 max-w-sm bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden;
   }
 
   .notification-success {

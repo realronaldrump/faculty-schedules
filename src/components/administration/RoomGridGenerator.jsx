@@ -21,6 +21,7 @@ import {
   Save as SaveIcon,
   Upload,
   X,
+  Loader2,
 } from "lucide-react";
 import ExportModal from "./ExportModal";
 import ExportableRoomSchedule from "./ExportableRoomSchedule";
@@ -53,6 +54,8 @@ import {
 } from "../../utils/scheduleGridStudio";
 
 import SelectDropdown from "../SelectDropdown";
+import { pluralize } from "../../utils/pluralize";
+import { getUserFacingErrorMessage } from "../../utils/errorMessages";
 
 const ScheduleGridStudio = lazy(() =>
   import("./schedule-grid-studio/ScheduleGridStudio"),
@@ -222,13 +225,15 @@ const RoomGridGenerator = () => {
         setDashboardSchedules(schedules);
         setLoadedTerm(termLabel);
         showMessage(
-          `Loaded ${schedules.length} schedules for ${termLabel}.`,
+          `Loaded ${pluralize(schedules.length, "schedule")} for ${termLabel}.`,
           "success",
         );
         return schedules;
       } catch (error) {
         console.error("Error loading dashboard data:", error);
-        showMessage("Failed to load dashboard data. " + error.message);
+        showMessage(
+          `Couldn't load schedule data. ${getUserFacingErrorMessage(error, "Please try again.")}`,
+        );
         return null;
       } finally {
         setIsLoadingDashboard(false);
@@ -374,7 +379,7 @@ const RoomGridGenerator = () => {
         );
       } else {
         showMessage(
-          `Found ${processedClassData.length} classes across ${Object.keys(newBuildings).length} buildings for ${targetSemester}.`,
+          `Found ${pluralize(processedClassData.length, "class", "classes")} across ${pluralize(Object.keys(newBuildings).length, "building")} for ${targetSemester}.`,
           "success",
         );
       }
@@ -577,7 +582,7 @@ const RoomGridGenerator = () => {
       );
     } else {
       showMessage(
-        `Successfully processed ${processedClassData.length} classes.`,
+        `Processed ${pluralize(processedClassData.length, "class", "classes")}.`,
         "success",
       );
     }
@@ -721,7 +726,7 @@ const RoomGridGenerator = () => {
         setScheduleHtml("");
         const buildingCount = new Set(targets.map((t) => t.building)).size;
         showMessage(
-          `Generated weekly schedules for ${targets.length} rooms across ${buildingCount} building${buildingCount === 1 ? "" : "s"}.`,
+          `Generated weekly schedules for ${pluralize(targets.length, "room")} across ${pluralize(buildingCount, "building")}.`,
           "success",
         );
       } else {
@@ -1383,7 +1388,7 @@ const RoomGridGenerator = () => {
       <Suspense
         fallback={
           <div className="university-card flex min-h-72 items-center justify-center p-8 text-gray-600">
-            <RotateCcw className="mr-3 h-5 w-5 animate-spin text-baylor-green" />
+            <Loader2 className="mr-3 h-5 w-5 animate-spin text-baylor-green" />
             Loading Schedule Grid Studio…
           </div>
         }
@@ -1425,7 +1430,7 @@ const RoomGridGenerator = () => {
   return (
     <div className="space-y-6">
       <div className="university-header rounded-xl p-8 mb-8">
-        <h1 className="university-title">Room Grid Generator</h1>
+        <h1 className="university-title">Room Grids</h1>
         <p className="university-subtitle">
           Quickly generate printable door schedules or use the Schedule Grid
           Studio to build, customize, save, and organize reusable designs.
@@ -1519,7 +1524,7 @@ const RoomGridGenerator = () => {
             }}
             className="btn-secondary text-sm"
           >
-            <ArrowLeft className="w-4 h-4 mr-2" />
+            <ArrowLeft className="w-4 h-4" />
             Change Data Source
           </button>
           <span className="ml-4 text-sm text-gray-600">
@@ -1555,8 +1560,8 @@ const RoomGridGenerator = () => {
           <div className="university-card-content">
             {isLoadingDashboard && (
               <div className="flex items-center justify-center py-8" role="status" aria-live="polite">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-baylor-green mr-3" aria-hidden="true"></div>
-                <span className="text-gray-600">Loading schedule data...</span>
+                <Loader2 className="mr-3 h-6 w-6 animate-spin text-baylor-green" aria-hidden="true" />
+                <span className="text-gray-600">Loading schedule data…</span>
               </div>
             )}
 
@@ -1586,8 +1591,8 @@ const RoomGridGenerator = () => {
                         className="btn-secondary w-full justify-center"
                         aria-label="Upload CLSS CSV file"
                       >
-                        <Upload className="w-4 h-4 mr-2" aria-hidden="true" />
-                        {isProcessing ? "Processing..." : "Choose File..."}
+                        <Upload className="w-4 h-4" aria-hidden="true" />
+                        {isProcessing ? "Processing…" : "Choose File…"}
                       </button>
                       <p id="csv-help" className="text-xs text-gray-500 mt-1">
                         Export from CLSS with room assignments
@@ -1613,7 +1618,7 @@ const RoomGridGenerator = () => {
                         aria-required="true"
                         aria-describedby="semester-help"
                       >
-                        <option value="">Choose semester...</option>
+                        <option value="">Choose semester…</option>
                         {availableSemesters.map((s) => (
                           <option key={s} value={s}>
                             {s}
@@ -1634,7 +1639,7 @@ const RoomGridGenerator = () => {
                     )}
                     <p id="semester-help" className="text-xs text-gray-500 mt-1">
                       {Object.keys(buildings).length > 0
-                        ? `${Object.keys(buildings).length} buildings available`
+                        ? `${pluralize(Object.keys(buildings).length, "building")} available`
                         : dataMode === "auto" ? "Select to load buildings" : "Upload CSV first"}
                     </p>
                   </div>
@@ -1664,14 +1669,14 @@ const RoomGridGenerator = () => {
                       aria-describedby="building-help"
                       {...(multiRoomMode && { multiple: true, value: selectedBuildings, onChange: handleSelectedBuildingsChange })}
                     >
-                      {!multiRoomMode && <option value="">Choose building...</option>}
+                      {!multiRoomMode && <option value="">Choose building…</option>}
                       {buildingOptions}
                     </SelectDropdown>
                     <p id="building-help" className="text-xs text-gray-500 mt-1">
                       {Object.keys(buildings).length === 0
                         ? "No buildings loaded yet"
                         : selectedBuilding && buildings[selectedBuilding]
-                          ? `${Array.from(buildings[selectedBuilding]).length} rooms`
+                          ? pluralize(Array.from(buildings[selectedBuilding]).length, "room")
                           : "Select a building to see rooms"}
                     </p>
                   </div>
@@ -1706,7 +1711,7 @@ const RoomGridGenerator = () => {
                         aria-describedby="room-help"
                       >
                         <option value="">
-                          {!selectedBuilding ? "Select building first" : "Choose room..."}
+                          {!selectedBuilding ? "Select building first" : "Choose room…"}
                         </option>
                         {roomOptions}
                       </SelectDropdown>
@@ -1805,7 +1810,7 @@ const RoomGridGenerator = () => {
                     className="btn-ghost text-gray-600 hover:text-gray-800"
                     aria-label="Reset form to default values"
                   >
-                    <RotateCcw className="w-4 h-4 mr-2" aria-hidden="true" />
+                    <RotateCcw className="w-4 h-4" aria-hidden="true" />
                     Reset Form
                   </button>
 
@@ -1841,7 +1846,7 @@ const RoomGridGenerator = () => {
                         }
                         aria-describedby="generate-help"
                       >
-                        <FileText className="w-4 h-4 mr-2" aria-hidden="true" />
+                        <FileText className="w-4 h-4" aria-hidden="true" />
                         Generate Schedule
                       </button>
                       {/* Tooltip for disabled state */}
@@ -1867,10 +1872,10 @@ const RoomGridGenerator = () => {
                         onClick={saveGrid}
                         disabled={isSaving}
                         className="btn-secondary"
-                        aria-label={isSaving ? "Saving grid..." : "Save this grid to view later"}
+                        aria-label={isSaving ? "Saving grid…" : "Save this grid to view later"}
                       >
-                        <SaveIcon className="w-4 h-4 mr-2" aria-hidden="true" />
-                        {isSaving ? "Saving..." : "Save Grid"}
+                        <SaveIcon className="w-4 h-4" aria-hidden="true" />
+                        {isSaving ? "Saving…" : "Save Grid"}
                       </button>
                     )}
                   </div>
@@ -1918,7 +1923,7 @@ const RoomGridGenerator = () => {
               className="btn-primary"
               aria-label="Export schedule as PDF"
             >
-              <Download className="w-4 h-4 mr-2" aria-hidden="true" />
+              <Download className="w-4 h-4" aria-hidden="true" />
               {exportButtonLabel}
             </button>
           )}
@@ -1926,8 +1931,8 @@ const RoomGridGenerator = () => {
         <div className="university-card-content min-h-[300px]">
           {isProcessing ? (
             <div className="text-center text-gray-500 flex flex-col items-center justify-center h-full py-12" role="status" aria-live="polite">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-baylor-green mb-4" aria-hidden="true"></div>
-              <p>Processing file...</p>
+              <Loader2 className="mb-4 h-8 w-8 animate-spin text-baylor-green" aria-hidden="true" />
+              <p>Processing file…</p>
             </div>
           ) : hasGeneratedSchedules ? (
             <div
@@ -2046,8 +2051,8 @@ const RoomGridGenerator = () => {
             {isLoadingSaved ? (
               <div className="text-gray-500 py-4" role="status" aria-live="polite">
                 <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-baylor-green mr-3" aria-hidden="true"></div>
-                  Loading saved grids...
+                  <Loader2 className="mr-3 h-5 w-5 animate-spin text-baylor-green" aria-hidden="true" />
+                  Loading saved grids…
                 </div>
               </div>
             ) : savedGrids.length === 0 ? (

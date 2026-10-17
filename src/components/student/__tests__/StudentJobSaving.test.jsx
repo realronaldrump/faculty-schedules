@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, describe, expect, it, vi } from "vitest";
 import StudentEditModal from "../StudentEditModal";
 import StudentAddWizard from "../StudentAddWizard";
-import { toStudentWorkerDateString } from "../../../utils/studentWorkers";
+import { toLocalISODate } from "../../../utils/timeUtils";
 
 const student = {
   id: "student-1",
@@ -158,7 +158,7 @@ describe("student job drafts and persistence", () => {
     enterJob();
     fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
-    expect(onSave.mock.calls[0][0].jobs[0].startDate).toBe(toStudentWorkerDateString());
+    expect(onSave.mock.calls[0][0].jobs[0].startDate).toBe(toLocalISODate());
   });
 
   it("leaves ended jobs out of the weekly hours and pay totals", () => {

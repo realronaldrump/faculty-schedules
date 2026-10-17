@@ -18,6 +18,7 @@ const UIContext = createContext(null);
 export const UIProvider = ({ children }) => {
   // Notification state
   const [notification, setNotification] = useState({
+    id: 0,
     show: false,
     type: 'success',
     title: '',
@@ -58,12 +59,14 @@ export const UIProvider = ({ children }) => {
 
   // Notification functions
   const showNotification = useCallback((type, title, message) => {
-    setNotification({
+    // A new id remounts the toast, so a replacement gets its full display time.
+    setNotification(prev => ({
+      id: prev.id + 1,
       show: true,
       type,
       title,
       message
-    });
+    }));
   }, []);
 
   const hideNotification = useCallback(() => {

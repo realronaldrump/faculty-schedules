@@ -123,3 +123,37 @@ export const formatMinutesTo24Hour = (minutes) => {
   const m = safe % 60;
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
 };
+
+/**
+ * Format a time range with an en dash.
+ *
+ * @param {number} startMinutes - Minutes from midnight
+ * @param {number} endMinutes - Minutes from midnight
+ * @returns {string} Range like "9:05 AM – 9:55 AM"
+ */
+export const formatTimeRange = (startMinutes, endMinutes) =>
+  `${formatMinutesToTime(startMinutes)} – ${formatMinutesToTime(endMinutes)}`;
+
+/**
+ * Format a duration without a zero hour or zero minutes.
+ *
+ * @param {number} minutes - Duration in minutes
+ * @returns {string} Duration like "50m", "1h 15m" or "2h"
+ */
+export const formatDuration = (minutes) => {
+  const total = Math.max(0, Math.round(Number(minutes) || 0));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (!h) return `${m}m`;
+  return m ? `${h}h ${m}m` : `${h}h`;
+};
+
+/**
+ * Local calendar date as YYYY-MM-DD, for date inputs and file names. Unlike
+ * toISOString(), it never rolls over to tomorrow in the evening.
+ *
+ * @param {Date} [date] - Defaults to now
+ * @returns {string} Date like "2026-10-14"
+ */
+export const toLocalISODate = (date = new Date()) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;

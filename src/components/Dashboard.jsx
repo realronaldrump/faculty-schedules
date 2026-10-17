@@ -39,7 +39,7 @@ const SectionCard = ({ section, isOpen, onToggle, isFirst, isPinned, onNavigate,
               </p>
             </div>
           </div>
-          <ChevronRight className="mt-1.5 h-4 w-4 text-gray-300 transition-all duration-200 group-open:rotate-90 group-hover/card:text-baylor-green/40" />
+          <ChevronRight className="mt-1.5 h-4 w-4 text-gray-300 transition-all duration-200 group-open/card:rotate-90 group-hover/card:text-baylor-green/40" />
         </div>
       </summary>
       <div className="border-t border-gray-50 divide-y divide-gray-50">
@@ -257,7 +257,7 @@ const Dashboard = () => {
             id="dashboard-search"
             data-tutorial="global-search"
             type="text"
-            placeholder="Search for people, rooms, courses, or tools..."
+            placeholder="Search for people, rooms, courses, or tools…"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             onKeyDown={handleSearchKeyDown}
@@ -382,7 +382,7 @@ const Dashboard = () => {
         </div>
         <div
           data-tutorial="explore-sections"
-          className="grid grid-cols-1 gap-4 lg:grid-cols-2"
+          className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2"
         >
           {navigationSections.map((section, sectionIndex) => (
             <SectionCard

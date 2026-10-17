@@ -9,11 +9,14 @@ import {
   Users,
   MapPin,
   Database,
-  AlertTriangle
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import { getImportTransactions, rollbackTransaction, deleteTransaction } from '../../utils/import/core';
 import { buildGroupedChanges } from '../../utils/import/transaction-model';
 import Modal from '../shared/Modal';
+import { getUserFacingErrorMessage } from '../../utils/errorMessages';
+import { pluralize } from '../../utils/pluralize';
 
 const getCollectionChangeCount = (groupedChanges, collection) => (
   Object.values(groupedChanges[collection] || { added: [], modified: [], deleted: [] })
@@ -82,7 +85,11 @@ const ImportHistoryModal = ({
       setShowConfirmRollback(null);
     } catch (error) {
       console.error('Error rolling back transaction:', error);
-      showNotification('error', 'Rollback Failed', error.message || 'Failed to roll back the import');
+      showNotification(
+        'error',
+        'Rollback Failed',
+        getUserFacingErrorMessage(error, 'Failed to roll back the import. Please try again.'),
+      );
     } finally {
       setIsRollingBack(false);
     }
@@ -228,9 +235,12 @@ const ImportHistoryModal = ({
         <p className="text-gray-700 mb-3">
           Are you sure you want to roll back the import for <strong>{transaction.semester}</strong>?
         </p>
-        <p className="text-sm text-gray-600 bg-red-50 p-3 rounded-lg">
-          ⚠️ This will permanently delete all {transaction.stats.totalChanges} imported records
-          and restore the database to its previous state. This action cannot be undone.
+        <p className="flex gap-2 text-sm text-gray-600 bg-red-50 p-3 rounded-lg">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" aria-hidden="true" />
+          <span>
+            This will permanently delete all {pluralize(transaction.stats.totalChanges, 'imported record')}{' '}
+            and restore the database to its previous state. This action cannot be undone.
+          </span>
         </p>
       </div>
 
@@ -249,8 +259,8 @@ const ImportHistoryModal = ({
         >
           {isLoading ? (
             <>
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              <span>Rolling Back...</span>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Rolling Back…</span>
             </>
           ) : (
             <>

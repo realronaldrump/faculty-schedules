@@ -1,5 +1,6 @@
 import SortableHeader from './SortableHeader';
 import ResponsiveTableScroll from './ResponsiveTableScroll';
+import { onActivateKey } from '../../utils/keyboard';
 
 /**
  * Standard HTML table component for directory views.
@@ -17,6 +18,7 @@ const DirectoryTable = ({
     renderActions,
     createRow,
     emptyMessage = 'No records found.',
+    emptyAction = null,
     rowKeyField = 'id'
 }) => {
     return (
@@ -53,6 +55,7 @@ const DirectoryTable = ({
                         <tr>
                             <td colSpan={columns.length + (renderActions ? 1 : 0)} className="px-4 py-12 text-center text-gray-500">
                                 {emptyMessage}
+                                {emptyAction && <div className="mt-3">{emptyAction}</div>}
                             </td>
                         </tr>
                     ) : (
@@ -64,6 +67,8 @@ const DirectoryTable = ({
                                 <tr
                                     key={rowId}
                                     className={`${isEditing ? 'bg-baylor-gold/5' : ''} transition-colors`}
+                                    tabIndex={onRowClick && !isEditing ? 0 : undefined}
+                                    onKeyDown={onRowClick && !isEditing ? onActivateKey(() => onRowClick(record)) : undefined}
                                 >
                                     {columns.map((col) => (
                                         <td

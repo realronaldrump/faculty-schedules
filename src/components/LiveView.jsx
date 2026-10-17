@@ -23,7 +23,7 @@ import {
   getCanonicalBuildingList,
   getLocationDisplay,
 } from "../utils/locationService";
-import { formatMinutesToTime } from "../utils/timeUtils";
+import { formatTimeRange, toLocalISODate } from "../utils/timeUtils";
 import { useData } from "../contexts/DataContext";
 import { usePeople } from "../contexts/PeopleContext";
 import { useAppConfig } from "../contexts/AppConfigContext";
@@ -524,7 +524,7 @@ const LiveView = () => {
                 location,
                 shiftStart: start,
                 shiftEnd: end,
-                shiftTimeStr: `${formatMinutesToTime(start)} - ${formatMinutesToTime(end)}`,
+                shiftTimeStr: formatTimeRange(start, end),
               },
             });
             return; // Only add student once
@@ -557,7 +557,7 @@ const LiveView = () => {
               location,
               shiftStart: start,
               shiftEnd: end,
-              shiftTimeStr: `${formatMinutesToTime(start)} - ${formatMinutesToTime(end)}`,
+              shiftTimeStr: formatTimeRange(start, end),
             },
           });
           return;
@@ -595,7 +595,7 @@ const LiveView = () => {
     });
   };
 
-  const asOfDateValue = customDate || asOfTime.toISOString().split("T")[0];
+  const asOfDateValue = customDate || toLocalISODate(asOfTime);
   const asOfTimeValue =
     customTime ||
     `${String(asOfTime.getHours()).padStart(2, "0")}:${String(
@@ -733,7 +733,7 @@ const LiveView = () => {
                   onFocus={() => setSearchFocused(true)}
                   onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
                   onKeyDown={handleSearchKeyDown}
-                  placeholder="Search faculty by name..."
+                  placeholder="Search faculty by name…"
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green transition-all text-lg"
                 />
                 {searchQuery && (
@@ -916,7 +916,7 @@ const LiveView = () => {
               <div className="text-2xl font-bold text-gray-900">
                 {liveStats.studentsNow}
               </div>
-              <div className="text-sm text-gray-500">Students On Duty</div>
+              <div className="text-sm text-gray-500">Students on Duty</div>
             </div>
           </div>
         </div>
@@ -1038,14 +1038,14 @@ const LiveView = () => {
           </div>
         </div>
 
-        {/* Students On Duty - Enhanced with job title and shift times */}
+        {/* Students on Duty - Enhanced with job title and shift times */}
         <div className="university-card lg:col-span-2">
           <div className="university-card-header border-b border-gray-100 px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Users className="w-5 h-5 text-amber-500" />
                 <h2 className="text-lg font-semibold text-gray-900">
-                  Student Workers On Duty
+                  Student Workers on Duty
                 </h2>
               </div>
               <button

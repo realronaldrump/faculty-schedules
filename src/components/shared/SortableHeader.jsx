@@ -1,4 +1,4 @@
-import { ArrowUpDown } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react';
 
 /**
  * Reusable sortable table header component.
@@ -20,18 +20,27 @@ const SortableHeader = ({
     as: Component = 'th'
 }) => {
     const isSorted = sortConfig?.key === columnKey;
-    const directionIcon = isSorted
-        ? (sortConfig.direction === 'ascending' ? '▲' : '▼')
-        : <ArrowUpDown size={14} className="opacity-30" />;
+    const ascending = sortConfig?.direction === 'ascending';
+    const DirectionIcon = !isSorted ? ChevronsUpDown : ascending ? ChevronUp : ChevronDown;
+    const ariaSort = isSorted ? (ascending ? 'ascending' : 'descending') : 'none';
 
     return (
-        <Component className={`table-header-cell ${className}`}>
+        <Component
+            className={`table-header-cell ${className}`}
+            scope={Component === 'th' ? 'col' : undefined}
+            aria-sort={Component === 'th' ? ariaSort : undefined}
+        >
             <button
+                type="button"
                 className="flex min-h-11 items-center gap-2 transition-colors hover:text-baylor-green/80 sm:min-h-0"
                 onClick={() => onSort(columnKey)}
             >
                 {label}
-                <span className="text-xs">{directionIcon}</span>
+                <DirectionIcon
+                    size={14}
+                    aria-hidden="true"
+                    className={isSorted ? 'text-baylor-green' : 'text-gray-400'}
+                />
             </button>
         </Component>
     );

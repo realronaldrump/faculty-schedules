@@ -9,7 +9,7 @@
 import { resolveOfficeLocation } from './spaceUtils';
 
 /**
- * Format a 10-digit phone number as (XXX) XXX - XXXX
+ * Format a 10-digit phone number as (XXX) XXX-XXXX
  * @param {string} phoneStr - Raw phone number (digits only or formatted)
  * @returns {string} Formatted phone number or '-' if invalid
  */
@@ -19,10 +19,21 @@ export const formatPhoneNumber = (phoneStr) => {
     if (cleaned.length === 10) {
         const match = cleaned.match(/^(\d{3})(\d{3})(\d{4})$/);
         if (match) {
-            return `(${match[1]}) ${match[2]} - ${match[3]}`;
+            return `(${match[1]}) ${match[2]}-${match[3]}`;
         }
     }
     return phoneStr;
+};
+
+/**
+ * tel: link target for a phone number ("tel:+12547101001" for US numbers).
+ * @param {string} phoneStr
+ * @returns {string} href, or '' when there are no digits to dial
+ */
+export const getPhoneHref = (phoneStr) => {
+    const digits = String(phoneStr || '').replace(/\D/g, '');
+    if (!digits) return '';
+    return digits.length === 10 ? `tel:+1${digits}` : `tel:${digits}`;
 };
 
 /**

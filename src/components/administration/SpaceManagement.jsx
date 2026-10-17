@@ -63,6 +63,8 @@ import SpaceUsageDetailModal from "./SpaceUsageDetailModal";
 import ResponsiveTableScroll from "../shared/ResponsiveTableScroll";
 
 import SelectDropdown from "../SelectDropdown";
+import { pluralize } from "../../utils/pluralize";
+
 const getCanonicalSpaceKeyFromSpace = (space) => {
   if (!space) return "";
   const raw = (space.spaceKey || space.id || "").toString().trim();
@@ -958,8 +960,8 @@ const SpaceManagement = () => {
 
       const message =
         existingKeys.length > 0
-          ? `Created ${spacesToCreate.length} spaces. ${existingKeys.length} already existed.`
-          : `Created ${spacesToCreate.length} spaces.`;
+          ? `Created ${pluralize(spacesToCreate.length, "space")}. ${existingKeys.length.toLocaleString()} already existed.`
+          : `Created ${pluralize(spacesToCreate.length, "space")}.`;
 
       showNotification("success", "Bulk Add Complete", message);
       resetForm();
@@ -1274,7 +1276,7 @@ const SpaceManagement = () => {
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
               >
-                <option value="">Select building...</option>
+                <option value="">Select building…</option>
                 {buildings.map((b) => (
                   <option key={b.code} value={b.code}>
                     {b.displayName} ({b.code})
@@ -1433,7 +1435,7 @@ const SpaceManagement = () => {
               className="btn-primary disabled:opacity-50"
             >
               <Layers size={18} />
-              {saving ? "Creating..." : "Create Spaces"}
+              {saving ? "Creating…" : "Create Spaces"}
             </button>
           </div>
         </div>
@@ -1464,7 +1466,7 @@ const SpaceManagement = () => {
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
               >
-                <option value="">Select building...</option>
+                <option value="">Select building…</option>
                 {buildings.map((b) => (
                   <option key={b.code} value={b.code}>
                     {b.displayName} ({b.code})
@@ -1624,7 +1626,7 @@ const SpaceManagement = () => {
               className="btn-primary disabled:opacity-50"
             >
               <Save size={18} />
-              {saving ? "Saving..." : "Save Space"}
+              {saving ? "Saving…" : "Save Space"}
             </button>
           </div>
         </div>
@@ -1639,7 +1641,7 @@ const SpaceManagement = () => {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search spaces..."
+            placeholder="Search spaces…"
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
           />
         </div>
@@ -1716,15 +1718,30 @@ const SpaceManagement = () => {
         {filteredSpaces.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
             <DoorOpen className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-            <p>
-              {searchQuery ||
-              buildingFilter !== "all" ||
-              typeFilter !== "all" ||
-              usageFilter !== "all" ||
-              reservationFilter !== "all"
-                ? "No spaces match your filters."
-                : 'No spaces found. Click "Add Space" or "Bulk Add" to create some.'}
-            </p>
+            {searchQuery ||
+            buildingFilter !== "all" ||
+            typeFilter !== "all" ||
+            usageFilter !== "all" ||
+            reservationFilter !== "all" ? (
+              <>
+                <p>No spaces match your filters.</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setBuildingFilter("all");
+                    setTypeFilter("all");
+                    setUsageFilter("all");
+                    setReservationFilter("all");
+                  }}
+                  className="mt-3 text-sm font-medium text-baylor-green hover:underline"
+                >
+                  Clear Search and Filters
+                </button>
+              </>
+            ) : (
+              <p>No spaces found. Click "Add Space" or "Bulk Add" to create some.</p>
+            )}
           </div>
         ) : (
           <ResponsiveTableScroll label="Space inventory">

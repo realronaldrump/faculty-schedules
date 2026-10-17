@@ -14,7 +14,7 @@ import { useSchedules } from "../../contexts/ScheduleContext";
 import { useUI } from "../../contexts/UIContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { parseTermDate } from "../../utils/termUtils";
-import { formatMinutesToTime, formatMinutesToLabel } from "../../utils/timeUtils";
+import { formatMinutesToTime, formatMinutesToLabel, formatTimeRange } from "../../utils/timeUtils";
 import { buildSingleEventICS, downloadICS, sanitizeForFile } from "../../utils/icsUtils";
 import { trackAction, trackFailure } from "../../utils/activityTracking";
 import { isSpaceReservable } from "../../utils/spaceUtils";
@@ -562,10 +562,10 @@ const ConflictBanner = ({ conflict, capacity, headcount }) => {
   if (conflict.hasConflict) {
     const items = [
       ...conflict.classConflicts.map(
-        (c) => `${c.Course || "Class"} (${c["Start Time"]}–${c["End Time"]})`,
+        (c) => `${c.Course || "Class"} (${c["Start Time"]} – ${c["End Time"]})`,
       ),
       ...conflict.reservationConflicts.map(
-        (r) => `${r.title} (${r.startTime}–${r.endTime})`,
+        (r) => `${r.title} (${r.startTime} – ${r.endTime})`,
       ),
     ];
     return (
@@ -635,11 +635,11 @@ const DayTimeline = ({ blocks, proposed }) => {
                 : "bg-blue-100 border border-blue-300 text-blue-800"
             }`}
             style={blockStyle(b.start, b.end)}
-            title={`${b.label} ${formatMinutesToTime(b.start)}–${formatMinutesToTime(b.end)}`}
+            title={`${b.label} ${formatTimeRange(b.start, b.end)}`}
           >
             <div className="font-medium truncate">{b.label}</div>
             <div className="truncate opacity-80">
-              {formatMinutesToTime(b.start)}–{formatMinutesToTime(b.end)}
+              {formatTimeRange(b.start, b.end)}
             </div>
           </div>
         ))}

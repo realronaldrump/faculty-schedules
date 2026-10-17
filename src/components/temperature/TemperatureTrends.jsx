@@ -188,7 +188,7 @@ const TemperatureLineChart = ({
           if (!resolvedWidth) {
             return (
               <div className="h-full flex items-center justify-center text-sm text-gray-500">
-                Sizing chart...
+                Sizing chart…
               </div>
             );
           }
@@ -830,7 +830,7 @@ const TemperatureTrends = ({
                 <input
                   type="text"
                   className="form-input pl-9 w-full"
-                  placeholder="Search rooms..."
+                  placeholder="Search rooms…"
                   value={roomSearch}
                   onChange={(e) => setRoomSearch(e.target.value)}
                 />
@@ -878,14 +878,14 @@ const TemperatureTrends = ({
               className={`flex-1 btn-secondary ${compareMode === "overlay" ? "bg-baylor-green/10 text-baylor-green" : ""}`}
               onClick={() => setCompareMode("overlay")}
             >
-              <LineChart className="w-4 h-4 mr-2" />
+              <LineChart className="w-4 h-4" />
               Overlay
             </button>
             <button
               className={`flex-1 btn-secondary ${compareMode === "grid" ? "bg-baylor-green/10 text-baylor-green" : ""}`}
               onClick={() => setCompareMode("grid")}
             >
-              <Grid2X2 className="w-4 h-4 mr-2" />
+              <Grid2X2 className="w-4 h-4" />
               Grid
             </button>
           </div>
@@ -910,7 +910,7 @@ const TemperatureTrends = ({
             className="btn-ghost w-full"
             onClick={() => setRefreshKey((prev) => prev + 1)}
           >
-            <RefreshCcw className="w-4 h-4 mr-2" />
+            <RefreshCcw className="w-4 h-4" />
             Refresh data
           </button>
         </div>
@@ -924,19 +924,19 @@ const TemperatureTrends = ({
                 Temperature Trends
               </h2>
               {dataLoading && (
-                <span className="text-xs text-gray-500">Loading...</span>
+                <span className="text-xs text-gray-500">Loading…</span>
               )}
             </div>
             <div className="flex items-center gap-2">
               <button className="btn-ghost" onClick={resetZoom}>
-                <ZoomOut className="w-4 h-4 mr-2" />
+                <ZoomOut className="w-4 h-4" />
                 Reset zoom
               </button>
               <button
                 className="btn-secondary"
                 onClick={() => setGranularity("auto")}
               >
-                <ZoomIn className="w-4 h-4 mr-2" />
+                <ZoomIn className="w-4 h-4" />
                 Auto
               </button>
             </div>

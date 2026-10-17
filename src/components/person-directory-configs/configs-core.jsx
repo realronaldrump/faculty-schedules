@@ -24,6 +24,7 @@ import { normalizeTermLabel, termCodeFromLabel } from '../../utils/termUtils';
 import { buildCSVContent, downloadTextFile } from '../../utils/csvUtils';
 
 import SelectDropdown from "../SelectDropdown";
+import { toLocalISODate } from '../../utils/timeUtils';
 
 const triggerCSVDownload = (csvContent, filename) => {
   downloadTextFile(csvContent, filename, 'text/csv;charset=utf-8;');
@@ -462,7 +463,7 @@ const exportFacultyCSV = (records = [], selectedColumns = DEFAULT_FACULTY_EXPORT
   const csvContent = buildCSVContent(headers, rows);
   triggerCSVDownload(
     csvContent,
-    `faculty-directory-export-${new Date().toISOString().split('T')[0]}.csv`
+    `faculty-directory-export-${toLocalISODate()}.csv`
   );
 };
 
@@ -481,7 +482,7 @@ const exportStaffCSV = (records = []) => {
 
   triggerCSVDownload(
     buildCSVContent(headers, rows),
-    `staff-directory-export-${new Date().toISOString().split('T')[0]}.csv`,
+    `staff-directory-export-${toLocalISODate()}.csv`,
   );
 };
 
@@ -497,7 +498,7 @@ const exportAdjunctCSV = (records = [], selectedColumns = DEFAULT_ADJUNCT_EXPORT
   const csvContent = buildCSVContent(headers, rows);
   triggerCSVDownload(
     csvContent,
-    `adjunct-directory-export-${new Date().toISOString().split('T')[0]}.csv`
+    `adjunct-directory-export-${toLocalISODate()}.csv`
   );
 };
 
@@ -696,6 +697,7 @@ const facultyDirectoryConfig = {
               onChange={handleCreateChange}
               className="w-full p-2 border rounded bg-baylor-gold/10 border-baylor-gold mb-2"
               placeholder="Full Name"
+              autoFocus
             />
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               {renderStatusToggles({
@@ -801,7 +803,7 @@ const facultyDirectoryConfig = {
           options={filterOptions.programs}
           selected={state.filters.programs}
           onChange={(selected) => state.setFilters((prev) => ({ ...prev, programs: selected }))}
-          placeholder="Select programs..."
+          placeholder="Select programs…"
         />
       </div>
       <div>
@@ -810,7 +812,7 @@ const facultyDirectoryConfig = {
           options={filterOptions.jobTitles}
           selected={state.filters.jobTitles}
           onChange={(selected) => state.setFilters((prev) => ({ ...prev, jobTitles: selected }))}
-          placeholder="Select job titles..."
+          placeholder="Select job titles…"
         />
       </div>
       <div>
@@ -819,7 +821,7 @@ const facultyDirectoryConfig = {
           options={filterOptions.buildings}
           selected={state.filters.buildings}
           onChange={(selected) => state.setFilters((prev) => ({ ...prev, buildings: selected }))}
-          placeholder="Select buildings..."
+          placeholder="Select buildings…"
         />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-9 gap-4">
@@ -1098,6 +1100,7 @@ const staffDirectoryConfig = {
               onChange={handleCreateChange}
               className="w-full p-2 border rounded bg-baylor-gold/10 border-baylor-gold mb-2"
               placeholder="Full Name"
+              autoFocus
             />
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               {renderStatusToggles({
@@ -1148,7 +1151,7 @@ const staffDirectoryConfig = {
           options={filterOptions.jobTitles}
           selected={state.filters.jobTitles}
           onChange={(selected) => state.setFilters((prev) => ({ ...prev, jobTitles: selected }))}
-          placeholder="Select job titles..."
+          placeholder="Select job titles…"
         />
       </div>
       <div>
@@ -1157,7 +1160,7 @@ const staffDirectoryConfig = {
           options={filterOptions.buildings}
           selected={state.filters.buildings}
           onChange={(selected) => state.setFilters((prev) => ({ ...prev, buildings: selected }))}
-          placeholder="Select buildings..."
+          placeholder="Select buildings…"
         />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1371,6 +1374,7 @@ const adjunctDirectoryConfig = {
               onChange={handleCreateChange}
               className="w-full p-2 border rounded bg-baylor-gold/10 border-baylor-gold mb-2"
               placeholder="Full Name"
+              autoFocus
             />
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               {renderStatusToggles({
@@ -1473,7 +1477,7 @@ const adjunctDirectoryConfig = {
           options={filterOptions.programs}
           selected={state.filters.programs}
           onChange={(selected) => state.setFilters((prev) => ({ ...prev, programs: selected }))}
-          placeholder="Select programs..."
+          placeholder="Select programs…"
         />
       </div>
       <div>
@@ -1482,7 +1486,7 @@ const adjunctDirectoryConfig = {
           options={filterOptions.jobTitles}
           selected={state.filters.jobTitles}
           onChange={(selected) => state.setFilters((prev) => ({ ...prev, jobTitles: selected }))}
-          placeholder="Select job titles..."
+          placeholder="Select job titles…"
         />
       </div>
       <div>
@@ -1491,7 +1495,7 @@ const adjunctDirectoryConfig = {
           options={filterOptions.buildings}
           selected={state.filters.buildings}
           onChange={(selected) => state.setFilters((prev) => ({ ...prev, buildings: selected }))}
-          placeholder="Select buildings..."
+          placeholder="Select buildings…"
         />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

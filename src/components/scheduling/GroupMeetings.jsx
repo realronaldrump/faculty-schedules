@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import FacultyContactCard from "../FacultyContactCard";
 import Modal from "../shared/Modal";
-import { parseTime, formatMinutesToTime } from "../../utils/timeUtils";
+import { parseTime, formatMinutesToTime, formatTimeRange, formatDuration } from "../../utils/timeUtils";
 import { splitMultiRoom } from "../../utils/locationService";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
@@ -352,7 +352,7 @@ const GroupMeetings = ({ embedded = false }) => {
           </div>
         ) : (
           <div className="text-center py-12 text-gray-500">
-            <div className="text-2xl mb-2">😔</div>
+            <Calendar className="w-8 h-8 mx-auto mb-2 text-gray-300" />
             <p className="text-lg">No available rooms for this time slot.</p>
             <p className="text-sm">
               Try a different time or a shorter meeting duration.
@@ -470,7 +470,7 @@ const GroupMeetings = ({ embedded = false }) => {
                     onClick={() => setIsProgramDropdownOpen((prev) => !prev)}
                     className="app-dropdown-trigger"
                   >
-                    <span>Select program...</span>
+                    <span>Select program…</span>
                     <GraduationCap className="w-5 h-5 text-baylor-green" />
                   </button>
                   {isProgramDropdownOpen && (
@@ -478,7 +478,7 @@ const GroupMeetings = ({ embedded = false }) => {
                       <div className="p-2 border-b border-gray-200">
                         <input
                           type="text"
-                          placeholder="Search programs..."
+                          placeholder="Search programs…"
                           value={programSearchTerm}
                           onChange={(e) => setProgramSearchTerm(e.target.value)}
                           className="app-dropdown-search"
@@ -490,7 +490,7 @@ const GroupMeetings = ({ embedded = false }) => {
                             {programSearchTerm
                               ? "No programs found matching your search."
                               : !programsLoaded
-                                ? "Loading programs..."
+                                ? "Loading programs…"
                                 : !showAdjuncts
                                   ? "No programs with full-time faculty available."
                                   : "No programs available."}
@@ -560,7 +560,7 @@ const GroupMeetings = ({ embedded = false }) => {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900"
-                  placeholder="Search professors..."
+                  placeholder="Search faculty…"
                 />
               </div>
             </div>
@@ -770,12 +770,10 @@ const GroupMeetings = ({ embedded = false }) => {
                           className="w-full text-left p-4 bg-baylor-green/5 border border-baylor-green/20 rounded-lg hover:bg-baylor-green/10 hover:shadow-md transition-all"
                         >
                           <div className="font-semibold text-baylor-green text-lg">
-                            {formatMinutesToTime(slot.start)} -{" "}
-                            {formatMinutesToTime(slot.end)}
+                            {formatTimeRange(slot.start, slot.end)}
                           </div>
                           <div className="text-sm text-baylor-green/80 mt-1">
-                            {Math.floor(slot.duration / 60)}h{" "}
-                            {slot.duration % 60}m window
+                            {formatDuration(slot.duration)} window
                           </div>
                           <div className="text-xs text-baylor-gold font-bold mt-2">
                             Click to Find a Room →

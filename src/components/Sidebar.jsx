@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
-import { ChevronRight, Menu, X, User, Star } from "lucide-react";
+import {
+  ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
+  X,
+  User,
+  Star,
+} from "lucide-react";
 import { useAuth } from "../contexts/AuthContext.jsx";
 
 const normalizeNavigationPath = (path = "") =>
@@ -21,6 +29,12 @@ const pathMatchesCurrent = (path, currentPage, currentTarget) => {
   return getPathnamePart(normalized) === currentPage;
 };
 
+const NAV_ITEM_CLASS = {
+  active: "nav-item-active",
+  current: "nav-item-current",
+  inactive: "nav-item-inactive",
+};
+
 const pathIsActive = (path, currentPage) => {
   const basePath = getPathnamePart(path);
   if (!basePath) return false;
@@ -36,11 +50,13 @@ const Sidebar = ({
   onNavigate,
   collapsed,
   onToggleCollapse,
+  onClose,
   selectedSemester,
   pinnedPages,
   togglePinPage,
 }) => {
   const [expandedSections, setExpandedSections] = useState([]); // Default expanded sections
+  const [collapsedTip, setCollapsedTip] = useState(null);
   const { isOwner } = useAuth();
   const location = useLocation();
   const currentTarget = `${currentPage}${location.search || ""}`;
@@ -52,6 +68,10 @@ const Sidebar = ({
         : [...prev, sectionId],
     );
   };
+
+  useEffect(() => {
+    if (!collapsed) setCollapsedTip(null);
+  }, [collapsed]);
 
   useEffect(() => {
     if (!currentPage || collapsed) return;
@@ -112,13 +132,35 @@ const Sidebar = ({
     isCurrentPage(child.path) ||
     (child.defaultForParent && isDefaultCurrentPage(parentPath));
 
+  // Collapsed icons get a label beside them; fixed positioning keeps it clear of
+  // the scrolling nav, which would otherwise clip it.
+  const showCollapsedTip = (event, label) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setCollapsedTip({
+      label,
+      top: rect.top + rect.height / 2,
+      left: rect.right + 12,
+    });
+  };
+
+  const hideCollapsedTip = () => setCollapsedTip(null);
+
+  const toggleLabel = onClose
+    ? "Close menu"
+    : collapsed
+      ? "Expand sidebar"
+      : "Collapse sidebar";
+  const ToggleIcon = onClose ? X : collapsed ? PanelLeftOpen : PanelLeftClose;
+
   return (
     <div
       className={`sidebar transition-all duration-300 ${collapsed ? "w-16" : "w-72"} flex flex-col min-h-screen h-screen sticky top-0`}
     >
       {/* Professional University Header */}
-      <div className={`sidebar-header ${collapsed ? "p-4" : "p-6"}`}>
-        <div className="flex items-center justify-between">
+      <div className={`sidebar-header ${collapsed ? "px-3 py-4" : "p-6"}`}>
+        <div
+          className={`flex items-center ${collapsed ? "justify-center" : "justify-between"}`}
+        >
           {!collapsed && (
             <div className="sidebar-brand">
               <div className="sidebar-logo">
@@ -136,21 +178,14 @@ const Sidebar = ({
               </div>
             </div>
           )}
-          {collapsed && (
-            <div className="sidebar-logo mx-auto">
-              <span className="text-white font-bold text-sm">
-                HSD
-              </span>
-            </div>
-          )}
           <button
-            onClick={() => {
-              onToggleCollapse();
-            }}
+            type="button"
+            onClick={onClose || onToggleCollapse}
             className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/80 hover:text-white"
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={toggleLabel}
+            aria-label={toggleLabel}
           >
-            {collapsed ? <Menu size={20} /> : <X size={20} />}
+            <ToggleIcon size={20} />
           </button>
         </div>
       </div>
@@ -192,7 +227,6 @@ const Sidebar = ({
             const Icon = item.icon;
             const hasChildren = item.children && item.children.length > 0;
             const isExpanded = expandedSections.includes(item.id);
-            const itemIsActive = isActive(item.path || item.id);
             const visibleChildren = hasChildren
               ? item.children.filter((child) => !isHidden(child))
               : [];
@@ -204,29 +238,50 @@ const Sidebar = ({
               return null;
             }
 
+            const sectionIsCurrent = hasChildren
+              ? visibleChildren.some((child) => isActive(child.path))
+              : isActive(item.path || item.id);
+            // An open section only tints itself; its current page carries the
+            // strong highlight. Collapsed, the section icon is all that shows.
+            const navItemState = !sectionIsCurrent
+              ? "inactive"
+              : hasChildren && !collapsed
+                ? "current"
+                : "active";
+
             return (
               <div key={item.id} className="space-y-1">
                 {/* Main Navigation Item */}
                 <button
                   onClick={() => {
-                    if (hasChildren) {
-                      if (!collapsed) {
-                        toggleSection(item.id);
-                      }
-                    } else {
+                    if (!hasChildren) {
                       onNavigate(item.path || item.id);
+                    } else if (collapsed) {
+                      setExpandedSections((prev) =>
+                        prev.includes(item.id) ? prev : [...prev, item.id],
+                      );
+                      onToggleCollapse();
+                    } else {
+                      toggleSection(item.id);
                     }
                   }}
-                  className={`nav-item w-full ${itemIsActive ? "nav-item-active" : "nav-item-inactive"
-                    }`}
-                  title={collapsed ? item.label : undefined}
+                  className={`nav-item group w-full ${NAV_ITEM_CLASS[navItemState]}`}
+                  aria-label={collapsed ? item.label : undefined}
+                  aria-expanded={hasChildren && !collapsed ? isExpanded : undefined}
+                  aria-current={!hasChildren && sectionIsCurrent ? "page" : undefined}
+                  onMouseEnter={collapsed ? (event) => showCollapsedTip(event, item.label) : undefined}
+                  onMouseLeave={collapsed ? hideCollapsedTip : undefined}
+                  onFocus={collapsed ? (event) => showCollapsedTip(event, item.label) : undefined}
+                  onBlur={collapsed ? hideCollapsedTip : undefined}
                 >
                   <div className="flex items-center space-x-3 flex-1">
                     <Icon
                       size={20}
-                      className={`flex-shrink-0 ${itemIsActive
+                      className={`flex-shrink-0 ${navItemState === "active"
                         ? "text-white"
-                        : "text-gray-500 group-hover:text-baylor-green"
+                        : navItemState === "current"
+                          ? "text-baylor-green"
+                          : "text-gray-500 group-hover:text-baylor-green"
                         }`}
                     />
                     {!collapsed && (
@@ -242,7 +297,9 @@ const Sidebar = ({
                       <ChevronRight
                         size={16}
                         className={
-                          itemIsActive ? "text-white" : "text-gray-400"
+                          navItemState === "current"
+                            ? "text-baylor-green/60"
+                            : "text-gray-400"
                         }
                       />
                     </div>
@@ -282,6 +339,11 @@ const Sidebar = ({
                                 onNavigate(child.path);
                               }}
                               className={`nav-sub-item flex-1 min-w-0 text-left ${childClassName}`}
+                              aria-current={
+                                !hasSidebarChildren && isCurrentPage(child.path)
+                                  ? "page"
+                                  : undefined
+                              }
                             >
                               <span className="text-sm truncate">
                                 {child.label}
@@ -289,6 +351,7 @@ const Sidebar = ({
                             </button>
                             {hasSidebarChildren && (
                               <button
+                                type="button"
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   toggleSection(child.id);
@@ -299,6 +362,12 @@ const Sidebar = ({
                                     ? `Collapse ${child.label}`
                                     : `Expand ${child.label}`
                                 }
+                                aria-label={
+                                  sidebarChildExpanded
+                                    ? `Collapse ${child.label}`
+                                    : `Expand ${child.label}`
+                                }
+                                aria-expanded={sidebarChildExpanded}
                               >
                                 <ChevronRight
                                   size={14}
@@ -307,12 +376,19 @@ const Sidebar = ({
                               </button>
                             )}
                             <button
+                              type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 togglePinPage(child.id);
                               }}
-                              className="p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-baylor-green/20"
+                              className={`p-1 rounded-md transition-opacity hover:bg-baylor-green/20 focus-visible:opacity-100 ${isPinned ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
                               title={isPinned ? "Unpin page" : "Pin page"}
+                              aria-label={
+                                isPinned
+                                  ? `Unpin ${child.label}`
+                                  : `Pin ${child.label}`
+                              }
+                              aria-pressed={isPinned}
                             >
                               <Star
                                 size={14}
@@ -323,13 +399,11 @@ const Sidebar = ({
                           {hasSidebarChildren && sidebarChildExpanded && (
                             <div className="space-y-1 pl-4">
                               {visibleSidebarChildren.map((sidebarChild) => {
-                                const sidebarChildClassName =
+                                const sidebarChildIsCurrent =
                                   isSidebarChildCurrent(
                                     sidebarChild,
                                     child.path,
-                                  )
-                                    ? "nav-sub-item-active"
-                                    : "nav-sub-item-inactive";
+                                  );
 
                                 return (
                                   <button
@@ -337,7 +411,10 @@ const Sidebar = ({
                                     onClick={() => {
                                       onNavigate(sidebarChild.path);
                                     }}
-                                    className={`nav-sub-item w-full text-left ${sidebarChildClassName}`}
+                                    className={`nav-sub-item w-full text-left ${sidebarChildIsCurrent ? "nav-sub-item-active" : "nav-sub-item-inactive"}`}
+                                    aria-current={
+                                      sidebarChildIsCurrent ? "page" : undefined
+                                    }
                                   >
                                     <span className="text-sm">
                                       {sidebarChild.label}
@@ -383,40 +460,24 @@ const Sidebar = ({
         )}
       </div>
 
-      {/* Tooltip styles for collapsed state */}
-      {collapsed && (
-        <style>{`
-          .nav-item:hover::after {
-            content: attr(title);
-            position: absolute;
-            left: 100%;
-            top: 50%;
-            transform: translateY(-50%);
-            background: rgba(21, 71, 52, 0.95);
-            color: white;
-            padding: 8px 12px;
-            border-radius: 8px;
-            font-size: 12px;
-            font-weight: 500;
-            white-space: nowrap;
-            z-index: 1000;
-            margin-left: 12px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            font-family: 'DM Sans', sans-serif;
-          }
-          .nav-item:hover::before {
-            content: '';
-            position: absolute;
-            left: 100%;
-            top: 50%;
-            transform: translateY(-50%);
-            margin-left: 6px;
-            border: 6px solid transparent;
-            border-right-color: rgba(21, 71, 52, 0.95);
-            z-index: 1000;
-          }
-        `}</style>
-      )}
+      {/* Portaled: the sticky sidebar is its own stacking context, so the
+          label would otherwise sit under the page content. */}
+      {collapsed &&
+        collapsedTip &&
+        createPortal(
+          <div
+            role="tooltip"
+            className="pointer-events-none fixed z-[1000] -translate-y-1/2 whitespace-nowrap rounded-lg bg-baylor-green px-3 py-2 text-xs font-medium text-white shadow-lg"
+            style={{ top: collapsedTip.top, left: collapsedTip.left }}
+          >
+            <span
+              aria-hidden="true"
+              className="absolute -left-1.5 top-1/2 -translate-y-1/2 border-y-[6px] border-r-[6px] border-y-transparent border-r-baylor-green"
+            />
+            {collapsedTip.label}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 };

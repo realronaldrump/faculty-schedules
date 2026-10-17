@@ -39,7 +39,7 @@ const getScheduleMeta = (schedule) => {
   const end = ((schedule["End Time"] || schedule.endTime || "") + "").trim();
   const whenParts = [];
   if (day) whenParts.push(day);
-  if (start && end) whenParts.push(`${start} - ${end}`);
+  if (start && end) whenParts.push(`${start} – ${end}`);
   else if (start || end) whenParts.push(start || end);
   const when = whenParts.join(" ");
   const instructor = (

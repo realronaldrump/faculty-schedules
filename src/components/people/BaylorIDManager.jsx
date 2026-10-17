@@ -16,6 +16,7 @@ import { usePeople } from "../../contexts/PeopleContext";
 import { usePeopleOperations } from "../../hooks";
 import { hasRole } from "../../utils/peopleUtils";
 import { downloadCSVFile } from "../../utils/csvUtils";
+import { toLocalISODate } from "../../utils/timeUtils";
 
 const getDisplayRoleLabels = (person) => {
   const labels = [];
@@ -124,7 +125,7 @@ const BaylorIDManager = ({ embedded = false }) => {
     ]);
 
     downloadCSVFile(
-      `baylor-id-export-${new Date().toISOString().split("T")[0]}.csv`,
+      `baylor-id-export-${toLocalISODate()}.csv`,
       headers,
       rows,
     );
@@ -317,6 +318,7 @@ const BaylorIDManager = ({ embedded = false }) => {
               onClick={() => saveId(person)}
               className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
               title="Save"
+              aria-label="Save"
             >
               <Save size={16} />
             </button>
@@ -324,6 +326,7 @@ const BaylorIDManager = ({ embedded = false }) => {
               onClick={cancelEdit}
               className="p-2 text-red-600 hover:bg-red-100 rounded-full"
               title="Cancel"
+              aria-label="Cancel"
             >
               <X size={16} />
             </button>
@@ -337,6 +340,7 @@ const BaylorIDManager = ({ embedded = false }) => {
             onClick={() => startEdit(person)}
             className="p-2 text-baylor-green hover:bg-baylor-green/10 rounded-full"
             title={getBaylorId(person) ? "Edit Baylor ID" : "Add Baylor ID"}
+            aria-label={getBaylorId(person) ? "Edit Baylor ID" : "Add Baylor ID"}
           >
             <Edit size={16} />
           </button>
@@ -478,7 +482,7 @@ const BaylorIDManager = ({ embedded = false }) => {
         onCancel={() => {
           if (!isRemoving) setRemoveTarget(null);
         }}
-        confirmText={isRemoving ? "Removing..." : "Remove ID"}
+        confirmText={isRemoving ? "Removing…" : "Remove ID"}
         cancelText="Cancel"
         variant="danger"
         confirmDisabled={isRemoving}

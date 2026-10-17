@@ -361,7 +361,7 @@ export const buildDataHealthViewModel = ({
       description:
         "The app is handling routine cleanup now. It will check everything again when it finishes.",
       primaryAction: null,
-      primaryLabel: "Cleaning...",
+      primaryLabel: "Cleaning…",
       metrics,
       decisionCount,
       routineCount,
@@ -378,7 +378,7 @@ export const buildDataHealthViewModel = ({
       description:
         "The app is looking for routine cleanup it can handle and anything that needs your choice.",
       primaryAction: null,
-      primaryLabel: "Checking...",
+      primaryLabel: "Checking…",
       metrics,
       decisionCount,
       routineCount,

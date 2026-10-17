@@ -34,7 +34,7 @@ describe("whatsNew releases", () => {
       expect(Number.isNaN(new Date(release.date).getTime())).toBe(false);
       expect(release.title).toBeTruthy();
       expect(release.summary).toBeTruthy();
-      expect(release.highlights.length).toBeGreaterThan(0);
+      expect(release.highlights.length).toBeLessThanOrEqual(5);
       release.highlights.forEach((highlight) => {
         expect(highlight.icon).toBeTruthy();
         expect(highlight.title).toBeTruthy();
@@ -47,18 +47,24 @@ describe("whatsNew releases", () => {
     expect(formatReleaseTimestamp(LATEST_RELEASE.date)).toContain("2026");
   });
 
-  it("announces the student schedule Timeline view and printable signs", () => {
-    expect(LATEST_RELEASE.version).toBe(14);
-    expect(LATEST_RELEASE.title).toBe(
+  it("announces the polish pass as a one-line release", () => {
+    expect(LATEST_RELEASE.version).toBe(15);
+    expect(LATEST_RELEASE.title).toBe("Polish throughout");
+    expect(LATEST_RELEASE.highlights).toEqual([]);
+    expect(RELEASES[1].version).toBe(14);
+  });
+
+  it("keeps the student schedule Timeline view and printable signs release", () => {
+    const release = RELEASES.find(({ version }) => version === 14);
+    expect(release.title).toBe(
       "Student schedules: Timeline view and printable signs",
     );
-    expect(LATEST_RELEASE.highlights.map(({ title }) => title)).toEqual([
+    expect(release.highlights.map(({ title }) => title)).toEqual([
       "Try the Timeline view",
       "One color per job",
       "Switch back anytime",
       "Print a schedule sign",
     ]);
-    expect(RELEASES[1].version).toBe(13);
   });
 });
 

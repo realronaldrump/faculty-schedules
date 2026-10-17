@@ -379,11 +379,11 @@ const OutlookRoomExport = () => {
             </div>
             <div>
               <h1 className="text-2xl font-semibold text-gray-900">
-                Export to Outlook (.ics)
+                Room Calendar Export
               </h1>
               <p className="text-sm text-gray-600">
-                Create room-based calendar files with America/Chicago timezone
-                and holiday exceptions.
+                Export room schedules as Outlook calendar files (.ics) with
+                America/Chicago timezone and holiday exceptions.
               </p>
             </div>
           </div>
@@ -508,14 +508,14 @@ const OutlookRoomExport = () => {
                       onClick={setAllRooms}
                       className="rounded-full border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-white"
                     >
-                      Select all
+                      Select All
                     </button>
                     <button
                       type="button"
                       onClick={clearAllRooms}
                       className="rounded-full border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-white"
                     >
-                      Clear all
+                      Clear All
                     </button>
                   </div>
                 </div>

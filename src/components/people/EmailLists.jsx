@@ -1,10 +1,12 @@
 import { useState, useMemo, useEffect } from "react";
-import { Search, Download, Mail, Filter, X, Check, ChevronDown, Users, GraduationCap, Settings, Wifi, Save, Edit2, Trash2, FolderOpen, Play } from "lucide-react";
+import { Search, Download, Mail, Filter, X, ChevronDown, Loader2, Users, GraduationCap, Settings, Wifi, Save, Edit2, Trash2, FolderOpen, Play } from "lucide-react";
 import MultiSelectDropdown from "../MultiSelectDropdown";
 import FacultyContactCard from "../FacultyContactCard";
 import ConfirmDialog from "../shared/ConfirmDialog";
+import SortableHeader from "../shared/SortableHeader";
 import Modal from "../shared/Modal";
 import { useData } from "../../contexts/DataContext";
+import { useUI } from "../../contexts/UIContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import useEmailListPresets from "../../hooks/useEmailListPresets";
 import { useTutorial } from "../../contexts/TutorialContext";
@@ -28,8 +30,12 @@ import {
 } from "../../utils/directorAssignments";
 import DirectorRoleBadge from "../shared/DirectorRoleBadge";
 import { downloadTextFile } from "../../utils/csvUtils";
+import { pluralize } from "../../utils/pluralize";
 
 import SelectDropdown from "../SelectDropdown";
+import { toLocalISODate } from "../../utils/timeUtils";
+import { getUserFacingErrorMessage } from "../../utils/errorMessages";
+
 const EmailLists = ({ embedded = false }) => {
   const {
     facultyData = [],
@@ -40,6 +46,7 @@ const EmailLists = ({ embedded = false }) => {
     spacesByKey,
     loadPrograms,
   } = useData();
+  const { showNotification } = useUI();
   const { loadPeople } = usePeople();
   const {
     presets,
@@ -60,11 +67,6 @@ const EmailLists = ({ embedded = false }) => {
   const [nameSort, setNameSort] = useState("firstName");
   const [filters, setFilters] = useState(createDefaultDirectoryFilters);
   const [showFilters, setShowFilters] = useState(false);
-  const [notification, setNotification] = useState({
-    show: false,
-    message: "",
-    type: "success",
-  });
   const [showOnlyWithCourses, setShowOnlyWithCourses] = useState(false);
   const [outlookVersion, setOutlookVersion] = useState("new"); // 'new' uses commas, 'old' uses semicolons
 
@@ -636,14 +638,6 @@ const EmailLists = ({ embedded = false }) => {
     }));
   };
 
-  const showNotification = (message, type = "success") => {
-    setNotification({ show: true, message, type });
-    setTimeout(
-      () => setNotification({ show: false, message: "", type: "success" }),
-      3000,
-    );
-  };
-
   const handleSelectAll = () => {
     if (selectedPeople.length === filteredData.length) {
       setSelectedPeople([]);
@@ -671,13 +665,14 @@ const EmailLists = ({ embedded = false }) => {
     );
   };
 
-  const generateEmailList = (format) => {
+  const generateEmailList = async (format) => {
     const selectedData = getSelectedPeopleData();
 
     if (selectedData.length === 0) {
       showNotification(
-        "Please select at least one person to generate an email list",
-        "error",
+        "warning",
+        "Select People First",
+        "Select at least one person to generate an email list.",
       );
       return;
     }
@@ -694,19 +689,27 @@ const EmailLists = ({ embedded = false }) => {
         break;
     }
 
-    copyToClipboard(emailString);
-    // Show a generic success notification
-    showNotification(
-      `Email list copied to clipboard with ${selectedData.length} contacts`,
-    );
+    if (await copyToClipboard(emailString)) {
+      showNotification(
+        "success",
+        "Email List Copied",
+        `Copied ${pluralize(selectedData.length, "contact")} to the clipboard.`,
+      );
+    }
   };
 
   const copyToClipboard = async (text) => {
     try {
       await navigator.clipboard.writeText(text);
+      return true;
     } catch (err) {
       console.error("Failed to copy to clipboard:", err);
-      showNotification("Failed to copy to clipboard", "error");
+      showNotification(
+        "error",
+        "Copy Failed",
+        "Couldn't copy to the clipboard. Please try again.",
+      );
+      return false;
     }
   };
 
@@ -714,8 +717,9 @@ const EmailLists = ({ embedded = false }) => {
     const peopleToExport = getSelectedPeopleData();
     if (peopleToExport.length === 0) {
       showNotification(
-        "Please select at least one person to download CSV",
-        "error",
+        "warning",
+        "Select People First",
+        "Select at least one person to download a CSV.",
       );
       return;
     }
@@ -724,10 +728,14 @@ const EmailLists = ({ embedded = false }) => {
       const csvContent = buildStudentWorkersCsv(peopleToExport);
       downloadTextFile(
         csvContent,
-        `student-workers-list-${new Date().toISOString().split("T")[0]}.csv`,
+        `student-workers-list-${toLocalISODate()}.csv`,
         "text/csv;charset=utf-8;",
       );
-      showNotification(`CSV downloaded with ${peopleToExport.length} students`);
+      showNotification(
+        "success",
+        "CSV Downloaded",
+        `Included ${pluralize(peopleToExport.length, "student")}.`,
+      );
       return;
     }
 
@@ -737,11 +745,15 @@ const EmailLists = ({ embedded = false }) => {
 
     downloadTextFile(
       csvContent,
-      `directory-email-list-${new Date().toISOString().split("T")[0]}.csv`,
+      `directory-email-list-${toLocalISODate()}.csv`,
       "text/csv;charset=utf-8;",
     );
 
-    showNotification(`CSV downloaded with ${peopleToExport.length} contacts`);
+    showNotification(
+      "success",
+      "CSV Downloaded",
+      `Included ${pluralize(peopleToExport.length, "contact")}.`,
+    );
   };
 
   const clearFilters = () => {
@@ -755,8 +767,9 @@ const EmailLists = ({ embedded = false }) => {
   const handleOpenCreatePreset = () => {
     if (selectedPeople.length === 0) {
       showNotification(
-        "Please select at least one person to create a preset",
-        "error",
+        "warning",
+        "Select People First",
+        "Select at least one person to create a preset.",
       );
       return;
     }
@@ -775,11 +788,15 @@ const EmailLists = ({ embedded = false }) => {
 
   const handleSavePreset = async () => {
     if (!presetName.trim()) {
-      showNotification("Please enter a preset name", "error");
+      showNotification("warning", "Name Required", "Enter a preset name.");
       return;
     }
     if (selectedPeople.length === 0) {
-      showNotification("Please select at least one person", "error");
+      showNotification(
+        "warning",
+        "Select People First",
+        "Select at least one person for this preset.",
+      );
       return;
     }
 
@@ -787,17 +804,21 @@ const EmailLists = ({ embedded = false }) => {
     try {
       if (editingPreset) {
         await updatePreset(editingPreset.id, presetName, selectedPeople);
-        showNotification(`Preset "${presetName}" updated successfully`);
+        showNotification("success", "Preset Updated", `"${presetName}" was updated.`);
       } else {
         await createPreset(presetName, selectedPeople);
-        showNotification(`Preset "${presetName}" created successfully`);
+        showNotification("success", "Preset Created", `"${presetName}" was created.`);
       }
       setShowPresetModal(false);
       setPresetName("");
       setEditingPreset(null);
     } catch (error) {
       console.error("Error saving preset:", error);
-      showNotification(`Failed to save preset: ${error.message}`, "error");
+      showNotification(
+        "error",
+        "Preset Not Saved",
+        getUserFacingErrorMessage(error, "Couldn't save the preset. Please try again."),
+      );
     } finally {
       setPresetSaving(false);
     }
@@ -812,10 +833,18 @@ const EmailLists = ({ embedded = false }) => {
     setPresetDeleting(true);
     try {
       await deletePreset(deletePresetConfirm.preset.id);
-      showNotification(`Preset "${deletePresetConfirm.preset.name}" deleted`);
+      showNotification(
+        "success",
+        "Preset Deleted",
+        `"${deletePresetConfirm.preset.name}" was deleted.`,
+      );
     } catch (error) {
       console.error("Error deleting preset:", error);
-      showNotification(`Failed to delete preset: ${error.message}`, "error");
+      showNotification(
+        "error",
+        "Preset Not Deleted",
+        getUserFacingErrorMessage(error, "Couldn't delete the preset. Please try again."),
+      );
     } finally {
       setPresetDeleting(false);
       setDeletePresetConfirm({ isOpen: false, preset: null });
@@ -846,12 +875,15 @@ const EmailLists = ({ embedded = false }) => {
 
       if (validIds.length !== preset.personIds.length) {
         showNotification(
-          `Loaded ${validIds.length} of ${preset.personIds.length} people (some may have been removed)`,
           "info",
+          "Preset Loaded",
+          `Loaded ${validIds.length} of ${pluralize(preset.personIds.length, "person", "people")}; the rest are no longer in the directory.`,
         );
       } else {
         showNotification(
-          `Loaded preset "${preset.name}" with ${validIds.length} people`,
+          "success",
+          "Preset Loaded",
+          `Loaded "${preset.name}" with ${pluralize(validIds.length, "person", "people")}.`,
         );
       }
     }
@@ -996,13 +1028,14 @@ const EmailLists = ({ embedded = false }) => {
 
           {/* Search and Filters */}
           <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-4">
-            <div className="flex items-center space-x-4">
-              {/* Search */}
-              <div className="flex-1 relative" data-tutorial="search-input">
+            <div className="flex flex-wrap items-center gap-4">
+              {/* Search keeps a usable width; the controls wrap below it when space runs out. */}
+              <div className="relative min-w-[18rem] flex-1" data-tutorial="search-input">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
-                  type="text"
-                  placeholder="Search by name, email, title, office, or role..."
+                  type="search"
+                  aria-label="Search people"
+                  placeholder="Search by name, email, title, office, or role…"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
@@ -1023,9 +1056,9 @@ const EmailLists = ({ embedded = false }) => {
                   }}
                   className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green min-w-[180px]"
                 >
-                  <option value="">Load preset...</option>
+                  <option value="">Load preset…</option>
                   {presetsLoading ? (
-                    <option disabled>Loading...</option>
+                    <option disabled>Loading…</option>
                   ) : presets.length === 0 ? (
                     <option disabled>No presets saved</option>
                   ) : (
@@ -1135,7 +1168,7 @@ const EmailLists = ({ embedded = false }) => {
                           programs: selected,
                         }))
                       }
-                      placeholder="Select programs..."
+                      placeholder="Select programs…"
                     />
                   </div>
                   <div>
@@ -1151,7 +1184,7 @@ const EmailLists = ({ embedded = false }) => {
                           jobTitles: selected,
                         }))
                       }
-                      placeholder="Select job titles..."
+                      placeholder="Select job titles…"
                     />
                   </div>
                   <div>
@@ -1167,7 +1200,7 @@ const EmailLists = ({ embedded = false }) => {
                           buildings: selected,
                         }))
                       }
-                      placeholder="Select buildings..."
+                      placeholder="Select buildings…"
                     />
                   </div>
                 </div>
@@ -1432,51 +1465,24 @@ const EmailLists = ({ embedded = false }) => {
                         className="h-4 w-4 rounded border-gray-300 text-baylor-green focus:ring-baylor-green"
                       />
                     </th>
-                    <th scope="col" className="table-header-cell">
-                      <button
-                        className="flex items-center gap-2"
-                        onClick={() => handleSort("name")}
-                      >
-                        Contact
-                        <span className="text-gray-400">
-                          {sortConfig.key === "name"
-                            ? sortConfig.direction === "ascending"
-                              ? "▲"
-                              : "▼"
-                            : ""}
-                        </span>
-                      </button>
-                    </th>
-                    <th scope="col" className="table-header-cell">
-                      <button
-                        className="flex items-center gap-2"
-                        onClick={() => handleSort("role")}
-                      >
-                        Role
-                        <span className="text-gray-400">
-                          {sortConfig.key === "role"
-                            ? sortConfig.direction === "ascending"
-                              ? "▲"
-                              : "▼"
-                            : ""}
-                        </span>
-                      </button>
-                    </th>
-                    <th scope="col" className="table-header-cell">
-                      <button
-                        className="flex items-center gap-2"
-                        onClick={() => handleSort("status")}
-                      >
-                        Status
-                        <span className="text-gray-400">
-                          {sortConfig.key === "status"
-                            ? sortConfig.direction === "ascending"
-                              ? "▲"
-                              : "▼"
-                            : ""}
-                        </span>
-                      </button>
-                    </th>
+                    <SortableHeader
+                      label="Contact"
+                      columnKey="name"
+                      sortConfig={sortConfig}
+                      onSort={handleSort}
+                    />
+                    <SortableHeader
+                      label="Role"
+                      columnKey="role"
+                      sortConfig={sortConfig}
+                      onSort={handleSort}
+                    />
+                    <SortableHeader
+                      label="Status"
+                      columnKey="status"
+                      sortConfig={sortConfig}
+                      onSort={handleSort}
+                    />
                   </tr>
                 </thead>
                 <tbody>
@@ -1561,6 +1567,13 @@ const EmailLists = ({ embedded = false }) => {
                 <p className="text-sm mt-2">
                   Try adjusting your search or filter criteria.
                 </p>
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="mt-3 text-sm font-medium text-baylor-green hover:underline"
+                >
+                  Clear Search and Filters
+                </button>
               </div>
             )}
           </div>
@@ -1637,7 +1650,7 @@ const EmailLists = ({ embedded = false }) => {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
                   type="text"
-                  placeholder="Search student workers..."
+                  placeholder="Search student workers…"
                   value={studentSearchTerm}
                   onChange={(e) => setStudentSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green"
@@ -1672,7 +1685,7 @@ const EmailLists = ({ embedded = false }) => {
                       buildings: sel,
                     }))
                   }
-                  placeholder="Select buildings..."
+                  placeholder="Select buildings…"
                 />
               </div>
 
@@ -1690,7 +1703,7 @@ const EmailLists = ({ embedded = false }) => {
                       jobTitles: sel,
                     }))
                   }
-                  placeholder="Select job titles..."
+                  placeholder="Select job titles…"
                 />
               </div>
             </div>
@@ -1767,17 +1780,12 @@ const EmailLists = ({ embedded = false }) => {
                     <th scope="col" className="table-header-cell">
                       Selected
                     </th>
-                    <th
-                      scope="col"
-                      className="table-header-cell cursor-pointer"
-                      onClick={() => handleStudentSort("name")}
-                    >
-                      Name{" "}
-                      {studentSortConfig.key === "name" &&
-                        (studentSortConfig.direction === "ascending"
-                          ? "▲"
-                          : "▼")}
-                    </th>
+                    <SortableHeader
+                      label="Name"
+                      columnKey="name"
+                      sortConfig={studentSortConfig}
+                      onSort={handleStudentSort}
+                    />
                     <th scope="col" className="table-header-cell">
                       Job Titles
                     </th>
@@ -1846,6 +1854,7 @@ const EmailLists = ({ embedded = false }) => {
           setEditingPreset(null);
         }}
         size="sm"
+        closeOnOverlayClick={false}
         title={editingPreset ? "Edit Preset" : "Create New Preset"}
         bodyClassName="modal-body space-y-4"
         footer={
@@ -1871,8 +1880,8 @@ const EmailLists = ({ embedded = false }) => {
             >
               {presetSaving ? (
                 <>
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Saving...
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Saving…
                 </>
               ) : (
                 <>
@@ -1885,13 +1894,20 @@ const EmailLists = ({ embedded = false }) => {
         }
       >
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            htmlFor="email-list-preset-name"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
             Preset Name
           </label>
           <input
+            id="email-list-preset-name"
             type="text"
             value={presetName}
             onChange={(e) => setPresetName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !presetSaving) handleSavePreset();
+            }}
             placeholder="e.g., Faculty Meeting Professors, Remote Adjuncts, etc."
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
             autoFocus
@@ -1899,8 +1915,9 @@ const EmailLists = ({ embedded = false }) => {
         </div>
         <div className="bg-gray-50 rounded-lg p-3">
           <p className="text-sm text-gray-600">
-            <span className="font-medium">{selectedPeople.length}</span> people
-            will be saved in this preset
+            <span className="font-medium">{selectedPeople.length}</span>{" "}
+            {selectedPeople.length === 1 ? "person" : "people"} will be saved in
+            this preset
           </p>
           {selectedPeople.length > 0 && (
             <div className="mt-2 max-h-32 overflow-y-auto">
@@ -1924,32 +1941,12 @@ const EmailLists = ({ embedded = false }) => {
         </div>
       </Modal>
 
-      {/* Notification */}
-      {notification.show && (
-        <div
-          className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg ${
-            notification.type === "error"
-              ? "bg-red-500 text-white"
-              : "bg-baylor-green text-white"
-          }`}
-        >
-          <div className="flex items-center">
-            {notification.type === "error" ? (
-              <X className="w-5 h-5 mr-2" />
-            ) : (
-              <Check className="w-5 h-5 mr-2" />
-            )}
-            {notification.message}
-          </div>
-        </div>
-      )}
-
       <ConfirmDialog
         isOpen={deletePresetConfirm.isOpen}
         title="Delete Preset?"
         message={`Are you sure you want to delete ${deletePresetLabel}? This action cannot be undone.`}
         variant="danger"
-        confirmText={presetDeleting ? "Deleting..." : "Delete Preset"}
+        confirmText={presetDeleting ? "Deleting…" : "Delete Preset"}
         cancelText="Cancel"
         onConfirm={handleConfirmDeletePreset}
         onCancel={handleCancelDeletePreset}

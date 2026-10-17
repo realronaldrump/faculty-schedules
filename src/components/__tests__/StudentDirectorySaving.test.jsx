@@ -107,7 +107,7 @@ afterEach(cleanup);
 describe("student directory save and tutorial flow", () => {
   it("persists a pending job through the real save hook and reopens it without replacing another semester", async () => {
     mount();
-    fireEvent.click(screen.getByTitle("Edit"));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit / }));
     fireEvent.click(screen.getByRole("button", { name: "Jobs & Schedule" }));
     fireEvent.click(screen.getByRole("button", { name: "Add Job" }));
     enterJob();
@@ -117,7 +117,7 @@ describe("student directory save and tutorial flow", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(store.documents.get("student-1").semesterSchedules["202640"].jobs).toHaveLength(2);
     expect(store.documents.get("student-1").semesterSchedules["202610"].jobs[0].jobTitle).toBe("Revised Spring Assignment");
-    fireEvent.click(screen.getByTitle("Edit"));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit / }));
     fireEvent.click(screen.getByRole("button", { name: "Jobs & Schedule" }));
     expect(within(screen.getByRole("dialog")).getByText("Front Desk Assistant")).toBeInTheDocument();
     expect(store.notification.mock.calls.filter(([type]) => type === "success")).toHaveLength(1);
@@ -125,7 +125,7 @@ describe("student directory save and tutorial flow", () => {
 
   it("keeps the editor and new job after a rejected write and permits a successful retry", async () => {
     mount();
-    fireEvent.click(screen.getByTitle("Edit"));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit / }));
     fireEvent.click(screen.getByRole("button", { name: "Jobs & Schedule" }));
     fireEvent.click(screen.getByRole("button", { name: "Add Job" }));
     enterJob();

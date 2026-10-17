@@ -52,6 +52,7 @@ import {
   resolveBuildingDisplayName,
   validateSpaceKey,
 } from "../utils/locationService";
+import { getUserFacingErrorMessage } from "../utils/errorMessages";
 
 const normalizeIdentifierString = (value) => {
   if (value === undefined || value === null) return "";
@@ -449,9 +450,10 @@ const usePeopleOperations = () => {
         );
       } catch (error) {
         console.error("❌ Error deleting faculty:", error);
-        const message =
-          error?.message ||
-          "Failed to delete faculty member. Please try again.";
+        const message = getUserFacingErrorMessage(
+          error,
+          "Failed to delete faculty member. Please try again.",
+        );
         showNotification("error", "Delete Failed", message);
       }
     },
@@ -613,8 +615,10 @@ const usePeopleOperations = () => {
         );
       } catch (error) {
         console.error("❌ Error deleting staff:", error);
-        const message =
-          error?.message || "Failed to delete staff member. Please try again.";
+        const message = getUserFacingErrorMessage(
+          error,
+          "Failed to delete staff member. Please try again.",
+        );
         showNotification("error", "Delete Failed", message);
       }
     },
@@ -775,8 +779,7 @@ const usePeopleOperations = () => {
             "Your sign-in has expired or your account was disabled. Sign out and back in, then try again.",
           );
         } else {
-          const friendly =
-            error && error.message ? error.message : "Unexpected error";
+          const friendly = getUserFacingErrorMessage(error, "Please try again.");
           showNotification(
             "error",
             "Operation Failed",
@@ -834,9 +837,10 @@ const usePeopleOperations = () => {
         return true;
       } catch (error) {
         console.error("❌ Error deleting student:", error);
-        const message =
-          error?.message ||
-          "Failed to delete student worker. Please try again.";
+        const message = getUserFacingErrorMessage(
+          error,
+          "Failed to delete student worker. Please try again.",
+        );
         showNotification("error", "Delete Failed", message);
         throw error;
       }
@@ -1274,9 +1278,10 @@ const usePeopleOperations = () => {
         );
       } catch (error) {
         console.error("❌ Error updating Baylor ID:", error);
-        const message =
-          error?.message ||
-          "Failed to update Baylor ID. Please try again.";
+        const message = getUserFacingErrorMessage(
+          error,
+          "Failed to update Baylor ID. Please try again.",
+        );
         showNotification(
           "error",
           "Update Failed",

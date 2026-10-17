@@ -9,10 +9,11 @@ import {
   isStudentJobEnded,
   parseHourlyRate,
   parseStudentWorkerDate,
-  toStudentWorkerDateString,
 } from "../../utils/studentWorkers";
+import { toLocalISODate } from "../../utils/timeUtils";
 import useStudentJobEditor from "../../hooks/useStudentJobEditor";
 import useStudentSave from "../../hooks/useStudentSave";
+import { pluralize } from "../../utils/pluralize";
 
 /**
  * StudentAddWizard - Step-by-step wizard for adding new student workers
@@ -52,7 +53,7 @@ const StudentAddWizard = ({
       email: isTutorialMode ? "tutorial.test@example.edu" : "",
       phone: "",
       hasNoPhone: isTutorialMode,
-      startDate: toStudentWorkerDateString(),
+      startDate: toLocalISODate(),
       endDate: "",
       isActive: true,
       jobs: [],
@@ -532,7 +533,7 @@ const StudentAddWizard = ({
                 <p className="text-gray-500 text-xs">
                   {job.weeklySchedule?.length || 0} schedule entries
                   {job.buildings?.length > 0 &&
-                    ` • ${job.buildings.length} locations`}
+                    ` • ${pluralize(job.buildings.length, "location")}`}
                 </p>
               </div>
             ))}
@@ -586,7 +587,7 @@ const StudentAddWizard = ({
       isOpen
       onClose={isSaving ? undefined : onCancel}
       closeOnEsc={!isSaving}
-      closeOnOverlayClick={!isSaving}
+      closeOnOverlayClick={false}
       size="lg"
       showClose={false}
       bodyClassName="flex flex-col"

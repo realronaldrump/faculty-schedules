@@ -7,7 +7,6 @@ import {
   RotateCcw,
   Filter,
   Search,
-  ChevronsUpDown,
   Plus,
   Trash2,
   ChevronDown,
@@ -20,9 +19,10 @@ import MultiSelectDropdown from "../MultiSelectDropdown";
 import FacultyContactCard from "../FacultyContactCard";
 import Modal from "../shared/Modal";
 import ConfirmDialog from "../shared/ConfirmDialog";
+import SortableHeader from "../shared/SortableHeader";
 import { formatChangeForDisplay } from "../../utils/recentChanges";
 import { buildCourseSectionKey } from "../../utils/courseUtils";
-import { parseTime } from "../../utils/timeUtils";
+import { parseTime, toLocalISODate } from "../../utils/timeUtils";
 import {
   SPACE_TYPE,
   splitMultiRoom,
@@ -54,6 +54,7 @@ import {
 import { buildCSVContent, downloadTextFile } from "../../utils/csvUtils";
 
 import SelectDropdown from "../SelectDropdown";
+import { getUserFacingErrorMessage } from "../../utils/errorMessages";
 const CourseManagement = ({ embedded = false }) => {
   const {
     scheduleData = [],
@@ -152,7 +153,12 @@ const CourseManagement = ({ embedded = false }) => {
       );
       closeLinkModal();
     } catch (error) {
-      showNotification?.("error", "Link Failed", error.message);
+      console.error("Error linking sections:", error);
+      showNotification?.(
+        "error",
+        "Link Failed",
+        getUserFacingErrorMessage(error, "Couldn't link the sections. Please try again."),
+      );
     } finally {
       setIsLinking(false);
     }
@@ -182,7 +188,12 @@ const CourseManagement = ({ embedded = false }) => {
         );
       }
     } catch (error) {
-      showNotification?.("error", "Unlink Failed", error.message);
+      console.error("Error unlinking section:", error);
+      showNotification?.(
+        "error",
+        "Unlink Failed",
+        getUserFacingErrorMessage(error, "Couldn't unlink the section. Please try again."),
+      );
     } finally {
       setIsLinking(false);
     }
@@ -219,7 +230,7 @@ const CourseManagement = ({ embedded = false }) => {
           ? schedule.meetingPatterns
               .map((p) =>
                 p?.day && p?.startTime && p?.endTime
-                  ? `${p.day} ${p.startTime}-${p.endTime}`
+                  ? `${p.day} ${p.startTime} – ${p.endTime}`
                   : p?.raw || "",
               )
               .filter(Boolean)
@@ -1105,7 +1116,7 @@ const CourseManagement = ({ embedded = false }) => {
     );
     downloadTextFile(
       buildCSVContent(headers, rows),
-      `course-export-${new Date().toISOString().split("T")[0]}.csv`,
+      `course-export-${toLocalISODate()}.csv`,
       "text/csv;charset=utf-8;",
     );
     setExportModalOpen(false);
@@ -1133,28 +1144,14 @@ const CourseManagement = ({ embedded = false }) => {
     return count;
   }, [filters]);
 
-  const DataTableHeader = ({ columnKey, label }) => {
-    const isSorted = sortConfig.key === columnKey;
-    return (
-      <th className="table-header-cell">
-        <button
-          className="flex items-center gap-1 hover:text-baylor-green/80 transition-colors"
-          onClick={() => handleSort(columnKey)}
-        >
-          {label}
-          {isSorted ? (
-            sortConfig.direction === "ascending" ? (
-              "▲"
-            ) : (
-              "▼"
-            )
-          ) : (
-            <ChevronsUpDown size={14} className="text-gray-400" />
-          )}
-        </button>
-      </th>
-    );
-  };
+  const DataTableHeader = ({ columnKey, label }) => (
+    <SortableHeader
+      label={label}
+      columnKey={columnKey}
+      sortConfig={sortConfig}
+      onSort={handleSort}
+    />
+  );
 
   // Get course statistics
   const courseStats = useMemo(() => {
@@ -1437,7 +1434,7 @@ const CourseManagement = ({ embedded = false }) => {
                   onChange={(selected) =>
                     setNewCourseData((prev) => ({ ...prev, Day: selected }))
                   }
-                  placeholder="Select days..."
+                  placeholder="Select days…"
                   displayMap={DAY_NAMES}
                 />
               </div>
@@ -1479,7 +1476,7 @@ const CourseManagement = ({ embedded = false }) => {
                   onChange={(selected) =>
                     setNewCourseData((prev) => ({ ...prev, Rooms: selected }))
                   }
-                  placeholder="Select one or more rooms..."
+                  placeholder="Select one or more rooms…"
                   menuMinWidth={ROOM_MENU_MIN_WIDTH}
                 />
               </div>
@@ -1602,7 +1599,7 @@ const CourseManagement = ({ embedded = false }) => {
                 onChange={(e) => applyFilterPreset(e.target.value)}
                 className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-baylor-green focus:border-baylor-green"
               >
-                <option value="">Quick filters...</option>
+                <option value="">Quick filters…</option>
                 {Object.entries(COURSE_FILTER_PRESETS).map(([key, preset]) => (
                   <option key={key} value={key}>
                     {preset.name}
@@ -1649,7 +1646,7 @@ const CourseManagement = ({ embedded = false }) => {
                   setFilters({ ...filters, searchTerm: e.target.value })
                 }
                 className="w-full pl-10 p-2 border border-gray-300 rounded-lg focus:ring-baylor-green focus:border-baylor-green bg-white text-gray-900"
-                placeholder="Search courses, instructors, rooms..."
+                placeholder="Search courses, instructors, rooms…"
               />
               <Search
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -1662,13 +1659,13 @@ const CourseManagement = ({ embedded = false }) => {
               onChange={(selected) =>
                 setFilters({ ...filters, instructor: selected })
               }
-              placeholder="Filter by Instructor..."
+              placeholder="Filter by Instructor…"
             />
             <MultiSelectDropdown
               options={Object.keys(DAY_NAMES)}
               selected={filters.day}
               onChange={(selected) => setFilters({ ...filters, day: selected })}
-              placeholder="Filter by Day..."
+              placeholder="Filter by Day…"
               displayMap={DAY_NAMES}
             />
             <MultiSelectDropdown
@@ -1677,7 +1674,7 @@ const CourseManagement = ({ embedded = false }) => {
               onChange={(selected) =>
                 setFilters({ ...filters, room: selected })
               }
-              placeholder="Filter by Room..."
+              placeholder="Filter by Room…"
               menuMinWidth={ROOM_MENU_MIN_WIDTH}
             />
           </div>
@@ -1700,7 +1697,7 @@ const CourseManagement = ({ embedded = false }) => {
                         programs: { ...prev.programs, include: selected },
                       }))
                     }
-                    placeholder="Select programs to include..."
+                    placeholder="Select programs to include…"
                   />
                 </div>
                 <div>
@@ -1716,7 +1713,7 @@ const CourseManagement = ({ embedded = false }) => {
                         programs: { ...prev.programs, exclude: selected },
                       }))
                     }
-                    placeholder="Select programs to exclude..."
+                    placeholder="Select programs to exclude…"
                   />
                 </div>
               </div>
@@ -1733,7 +1730,7 @@ const CourseManagement = ({ embedded = false }) => {
                     onChange={(selected) =>
                       setFilters((prev) => ({ ...prev, sections: selected }))
                     }
-                    placeholder="Select sections..."
+                    placeholder="Select sections…"
                   />
                 </div>
               </div>
@@ -1753,7 +1750,7 @@ const CourseManagement = ({ embedded = false }) => {
                         buildings: { ...prev.buildings, include: selected },
                       }))
                     }
-                    placeholder="Select buildings to include..."
+                    placeholder="Select buildings to include…"
                   />
                 </div>
                 <div>
@@ -1769,7 +1766,7 @@ const CourseManagement = ({ embedded = false }) => {
                         buildings: { ...prev.buildings, exclude: selected },
                       }))
                     }
-                    placeholder="Select buildings to exclude..."
+                    placeholder="Select buildings to exclude…"
                   />
                 </div>
               </div>
@@ -2148,7 +2145,7 @@ const CourseManagement = ({ embedded = false }) => {
                                 Day: selected.join(""),
                               }))
                             }
-                            placeholder="Days..."
+                            placeholder="Days…"
                             displayMap={DAY_NAMES}
                           />
                         </td>
@@ -2180,7 +2177,7 @@ const CourseManagement = ({ embedded = false }) => {
                                 Room: selected.join("; "),
                               }))
                             }
-                            placeholder="Select room(s)..."
+                            placeholder="Select room(s)…"
                             menuMinWidth={ROOM_MENU_MIN_WIDTH}
                             menuPortal
                           />
@@ -2410,6 +2407,13 @@ const CourseManagement = ({ embedded = false }) => {
                         <p className="text-sm">
                           Try adjusting your search criteria
                         </p>
+                        <button
+                          type="button"
+                          onClick={clearFilters}
+                          className="mt-3 text-sm font-medium text-baylor-green hover:underline"
+                        >
+                          Clear Filters
+                        </button>
                       </div>
                     )}
                   </td>
@@ -2500,7 +2504,7 @@ const CourseManagement = ({ embedded = false }) => {
                 disabled={!linkTargetId || isLinking}
                 className="px-4 py-2 text-sm bg-baylor-green text-white rounded hover:bg-baylor-green/90 disabled:opacity-50"
               >
-                {isLinking ? "Linking..." : "Link Sections"}
+                {isLinking ? "Linking…" : "Link Sections"}
               </button>
             </>
           }

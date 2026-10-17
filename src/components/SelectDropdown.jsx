@@ -92,7 +92,7 @@ const SelectDropdown = ({
   className = "",
   buttonClassName = "",
   menuClassName = "",
-  placeholder = "Select...",
+  placeholder = "Select…",
   disabled = false,
   multiple = false,
   name,

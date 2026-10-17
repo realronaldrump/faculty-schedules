@@ -477,7 +477,7 @@ const UserActivityPage = () => {
               })
             }
           >
-            Clear filters
+            Clear Filters
           </button>
         )}
       </div>

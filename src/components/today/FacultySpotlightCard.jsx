@@ -85,7 +85,7 @@ const FacultySpotlightCard = ({ faculty, locationStatus, onClose }) => {
                             <div className="text-sm text-gray-500 flex items-center gap-2">
                               <span className="flex items-center gap-1">
                                 <Clock className="w-3 h-3" />
-                                {conflict.startTime} - {conflict.endTime}
+                                {conflict.startTime} – {conflict.endTime}
                               </span>
                             </div>
                           </div>

@@ -858,7 +858,7 @@ export const TUTORIALS = {
         id: "faculty-search",
         title: "Add Faculty to Compare",
         content:
-          "On the Compare Schedules tab you build a side-by-side view. Click 'Add faculty member...' to search by name and pick someone, or use 'Select program...' beside it to add an entire program at once.",
+          "On the Compare Schedules tab you build a side-by-side view. Click 'Add faculty member…' to search by name and pick someone, or use 'Select program…' beside it to add an entire program at once.",
         target: '[data-tutorial="faculty-search"]',
         position: "bottom",
         action: "Open the picker to add a faculty member",

@@ -1,15 +1,25 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { X, CheckCircle, AlertCircle, AlertTriangle, Info, Shield } from 'lucide-react';
 
+// Errors stay up longer so there is time to read them.
+const DISPLAY_MS = { error: 8000 };
+const DEFAULT_DISPLAY_MS = 5000;
+
 const Notification = ({ show, type, title, message, onClose }) => {
+  const timerRef = useRef(null);
+
+  const stopTimer = useCallback(() => clearTimeout(timerRef.current), []);
+
+  const startTimer = useCallback(() => {
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(onClose, DISPLAY_MS[type] || DEFAULT_DISPLAY_MS);
+  }, [onClose, type]);
+
   useEffect(() => {
-    if (show) {
-      const timer = setTimeout(() => {
-        onClose();
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [show, onClose]);
+    if (!show) return undefined;
+    startTimer();
+    return stopTimer;
+  }, [show, startTimer, stopTimer]);
 
   if (!show) return null;
 
@@ -45,7 +55,12 @@ const Notification = ({ show, type, title, message, onClose }) => {
   };
 
   return (
-    <div className={getNotificationClass()}>
+    <div
+      className={getNotificationClass()}
+      role={type === 'error' ? 'alert' : 'status'}
+      onMouseEnter={stopTimer}
+      onMouseLeave={startTimer}
+    >
       <div className="p-4">
         <div className="flex items-start">
           <div className="flex-shrink-0">
@@ -58,15 +73,17 @@ const Notification = ({ show, type, title, message, onClose }) => {
               </h4>
             )}
             {message && (
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-600 whitespace-pre-line">
                 {message}
               </p>
             )}
           </div>
           <div className="ml-4 flex-shrink-0">
             <button
+              type="button"
               onClick={onClose}
-              className="inline-flex text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition-colors"
+              aria-label="Dismiss notification"
+              className="inline-flex rounded text-gray-400 hover:text-gray-600 focus-visible:text-gray-600 transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -77,4 +94,4 @@ const Notification = ({ show, type, title, message, onClose }) => {
   );
 };
 
-export default Notification; 
+export default Notification;

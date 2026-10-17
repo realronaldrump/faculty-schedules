@@ -91,6 +91,8 @@ import ImportPanel from "./monitoring/ImportPanel";
 import SettingsPanel from "./monitoring/SettingsPanel";
 
 import SelectDropdown from "../SelectDropdown";
+import { pluralize } from "../../utils/pluralize";
+
 const MAX_FIRESTORE_BATCH_WRITES = 400;
 
 const toLocalDateToken = (value) => {
@@ -2793,10 +2795,10 @@ const TemperatureMonitoring = () => {
       if (totalNewReadings === 0) {
         const skippedNote =
           totalSkippedExisting > 0
-            ? ` ${totalSkippedExisting} existing readings were skipped.`
+            ? ` ${pluralize(totalSkippedExisting, "existing reading")} ${totalSkippedExisting === 1 ? "was" : "were"} skipped.`
             : "";
         const conflictNote =
-          totalConflicts > 0 ? ` ${totalConflicts} conflicts were skipped.` : "";
+          totalConflicts > 0 ? ` ${pluralize(totalConflicts, "conflict")} ${totalConflicts === 1 ? "was" : "were"} skipped.` : "";
         showNotification(
           "success",
           "No New Readings",
@@ -2804,7 +2806,7 @@ const TemperatureMonitoring = () => {
         );
       } else {
         const conflictNote =
-          totalConflicts > 0 ? ` (${totalConflicts} conflicts skipped)` : "";
+          totalConflicts > 0 ? ` (${pluralize(totalConflicts, "conflict")} skipped)` : "";
         const skippedNote =
           totalSkippedExisting > 0
             ? ` (${totalSkippedExisting} existing readings skipped)`
@@ -3167,7 +3169,7 @@ const TemperatureMonitoring = () => {
     if (roomsLoading || settingsLoading) {
       return (
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-600">
-          Loading floorplan data...
+          Loading floorplan data…
         </div>
       );
     }
@@ -3186,20 +3188,20 @@ const TemperatureMonitoring = () => {
           <div className="flex items-center gap-2">
             {!editingPositions ? (
               <button className="btn-secondary" onClick={startEditingPositions}>
-                <Pencil className="w-4 h-4 mr-2" /> Edit Positions
+                <Pencil className="w-4 h-4" /> Edit Positions
               </button>
             ) : (
               <>
                 <button className="btn-primary" onClick={saveMarkerPositions}>
-                  <Save className="w-4 h-4 mr-2" /> Save Positions
+                  <Save className="w-4 h-4" /> Save Positions
                 </button>
                 <button className="btn-ghost" onClick={cancelEditingPositions}>
-                  <X className="w-4 h-4 mr-2" /> Cancel
+                  <X className="w-4 h-4" /> Cancel
                 </button>
               </>
             )}
             <label className="btn-secondary cursor-pointer">
-              <ImageIcon className="w-4 h-4 mr-2" /> Upload PNG
+              <ImageIcon className="w-4 h-4" /> Upload PNG
               <input
                 type="file"
                 accept="image/png"
@@ -3218,7 +3220,7 @@ const TemperatureMonitoring = () => {
               className="btn-ghost text-red-600 hover:text-red-700 hover:bg-red-50"
               onClick={handleDeleteFloorplan}
             >
-              <Trash2 className="w-4 h-4 mr-2" /> Delete Floorplan
+              <Trash2 className="w-4 h-4" /> Delete Floorplan
             </button>
           </div>
         )}
@@ -3587,7 +3589,7 @@ const TemperatureMonitoring = () => {
               onClick={loadHistorical}
               disabled={historicalLoading}
             >
-              {historicalLoading ? "Loading..." : "Load"}
+              {historicalLoading ? "Loading…" : "Load"}
             </button>
           </div>
         </div>
@@ -3600,7 +3602,7 @@ const TemperatureMonitoring = () => {
               value={historicalSpaceKey}
               onChange={(e) => setHistoricalSpaceKey(e.target.value)}
             >
-              <option value="">Select a room...</option>
+              <option value="">Select a room…</option>
               {roomsForBuilding.map((room) => {
                 const spaceKey = room.spaceKey || room.id;
                 if (!spaceKey) return null;
@@ -3757,7 +3759,7 @@ const TemperatureMonitoring = () => {
               htmlFor="temperature-import-csvs"
               className="btn-secondary cursor-pointer inline-flex items-center"
             >
-              <FileUp className="w-4 h-4 mr-2" /> Choose Files
+              <FileUp className="w-4 h-4" /> Choose Files
             </label>
             {importItems.length > 0 && (
               <span className="text-xs text-gray-500">
@@ -4059,7 +4061,7 @@ const TemperatureMonitoring = () => {
                       }))
                     }
                   >
-                    <option value="">Select room...</option>
+                    <option value="">Select room…</option>
                     {roomsForBuilding.map((room) => {
                       const spaceKey = room.spaceKey || room.id;
                       if (!spaceKey) return null;
@@ -4110,7 +4112,7 @@ const TemperatureMonitoring = () => {
             onChange={(e) => setDeleteRoomSpaceKey(e.target.value)}
             disabled={deletingRoomData || importing}
           >
-            <option value="">Select room...</option>
+            <option value="">Select room…</option>
             {roomsForBuilding.map((room) => {
               const spaceKey = room.spaceKey || room.id;
               if (!spaceKey) return null;
@@ -4126,8 +4128,8 @@ const TemperatureMonitoring = () => {
             onClick={() => setShowDeleteRoomDataConfirm(true)}
             disabled={!deleteRoomSpaceKey || deletingRoomData || importing}
           >
-            <Trash2 className="w-4 h-4 mr-2" />
-            {deletingRoomData ? "Deleting..." : "Delete Room Data"}
+            <Trash2 className="w-4 h-4" />
+            {deletingRoomData ? "Deleting…" : "Delete Room Data"}
           </button>
         </div>
       </div>
@@ -4376,7 +4378,7 @@ const TemperatureMonitoring = () => {
               onClick={handleSnapshotExport}
               disabled={exporting}
             >
-              {exporting ? "Exporting..." : "Export Snapshots CSV"}
+              {exporting ? "Exporting…" : "Export Snapshots CSV"}
             </button>
           </div>
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
@@ -4397,7 +4399,7 @@ const TemperatureMonitoring = () => {
               onClick={handleRawExport}
               disabled={exporting}
             >
-              {exporting ? "Exporting..." : "Export Raw Readings CSV"}
+              {exporting ? "Exporting…" : "Export Raw Readings CSV"}
             </button>
           </div>
         </div>
@@ -4674,7 +4676,7 @@ const TemperatureMonitoring = () => {
               onClick={handleRecomputeSnapshots}
               disabled={recomputing}
             >
-              {recomputing ? "Recomputing..." : "Recompute Snapshots"}
+              {recomputing ? "Recomputing…" : "Recompute Snapshots"}
             </button>
           </div>
         </div>

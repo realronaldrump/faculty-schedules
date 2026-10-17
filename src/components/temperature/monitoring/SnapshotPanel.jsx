@@ -16,7 +16,7 @@ const SnapshotPanel = ({
   if (snapshotLoading && isSnapshotView) {
     return (
       <div className="bg-white rounded-lg border border-gray-200 p-6 text-gray-600">
-        Loading snapshot data...
+        Loading snapshot data…
       </div>
     );
   }

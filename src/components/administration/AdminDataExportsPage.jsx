@@ -17,6 +17,7 @@ import {
 } from "../../utils/export/adminExportData";
 
 import SelectDropdown from "../SelectDropdown";
+import { getUserFacingErrorMessage } from "../../utils/errorMessages";
 const TERM_SCOPE_ALL = "all";
 const TERM_SCOPE_SELECTED = "selected";
 
@@ -95,7 +96,7 @@ const AdminDataExportsPage = () => {
     successTitle,
     successMessage,
   }) => {
-    setExportStatus("Loading workbook tools...");
+    setExportStatus("Loading workbook tools…");
     await waitForPaint();
     const { downloadAdminWorkbook } = await import(
       "../../utils/export/adminWorkbookBuilder"
@@ -157,8 +158,10 @@ const AdminDataExportsPage = () => {
       });
     } catch (error) {
       console.error("Export failed:", error);
-      const message =
-        error?.message || "Unable to generate the workbook. Please try again.";
+      const message = getUserFacingErrorMessage(
+        error,
+        "Unable to generate the workbook. Please try again.",
+      );
       setPageError(message);
       showNotification("error", "Export Failed", message);
     } finally {
@@ -188,8 +191,10 @@ const AdminDataExportsPage = () => {
       });
     } catch (error) {
       console.error("Large export failed:", error);
-      const message =
-        error?.message || "Unable to complete the large export download.";
+      const message = getUserFacingErrorMessage(
+        error,
+        "Unable to complete the large export download.",
+      );
       setPageError(message);
       showNotification("error", "Export Failed", message);
     } finally {
@@ -258,7 +263,7 @@ const AdminDataExportsPage = () => {
                   onChange={(event) => setSelectedTerm(event.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-baylor-green/20 focus:border-baylor-green"
                 >
-                  <option value="">Choose a semester...</option>
+                  <option value="">Choose a semester…</option>
                   {normalizedTermOptions.map((term) => (
                     <option key={term.termCode || term.term} value={term.term}>
                       {term.term}

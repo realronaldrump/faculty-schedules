@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Users, Edit, Save, X, Plus, Search, GripVertical, UserCog, Building2, ChevronDown, ChevronUp, ArrowRightLeft, Trash2, GraduationCap, Star, Move, Eye } from "lucide-react";
+import { Users, Edit, Save, X, Plus, Search, GripVertical, UserCog, Building2, ChevronDown, ChevronUp, ArrowRightLeft, Trash2, GraduationCap, Star, Move, Eye, Loader2 } from "lucide-react";
 import FacultyContactCard from "../FacultyContactCard";
 import Modal from "../shared/Modal";
 import ConfirmDialog from "../shared/ConfirmDialog";
@@ -619,7 +619,7 @@ const ProgramManagement = ({ embedded = false }) => {
               />
               <input
                 type="text"
-                placeholder="Search programs or faculty..."
+                placeholder="Search programs or faculty…"
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#154734] focus:border-transparent transition-all"
@@ -828,7 +828,7 @@ const ProgramManagement = ({ embedded = false }) => {
                                 className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                   role === "upd"
                                     ? "bg-amber-100 text-amber-800"
-                                    : "bg-sky-100 text-sky-800"
+                                    : "bg-baylor-blue/10 text-baylor-blue"
                                 }`}
                               >
                                 <Star size={12} className="mr-1" />
@@ -923,7 +923,7 @@ const ProgramManagement = ({ embedded = false }) => {
                                         assigned
                                           ? role === "upd"
                                             ? "bg-amber-100 text-amber-800 border-amber-300"
-                                            : "bg-sky-100 text-sky-800 border-sky-300"
+                                            : "bg-baylor-blue/10 text-baylor-blue border-baylor-blue/30"
                                           : "bg-white text-gray-400 border-gray-200 hover:text-gray-700 hover:border-gray-300"
                                       }`}
                                     >
@@ -1005,14 +1005,14 @@ const ProgramManagement = ({ embedded = false }) => {
                                           className={`flex items-center gap-3 p-2.5 bg-white rounded-lg border ${
                                             role === "upd"
                                               ? "border-amber-200"
-                                              : "border-sky-200"
+                                              : "border-baylor-blue/20"
                                           }`}
                                         >
                                           <div
                                             className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                                               role === "upd"
                                                 ? "bg-amber-100"
-                                                : "bg-sky-100"
+                                                : "bg-baylor-blue/10"
                                             }`}
                                           >
                                             <Star
@@ -1020,7 +1020,7 @@ const ProgramManagement = ({ embedded = false }) => {
                                               className={
                                                 role === "upd"
                                                   ? "text-amber-700"
-                                                  : "text-sky-700"
+                                                  : "text-baylor-blue"
                                               }
                                             />
                                           </div>
@@ -1310,8 +1310,8 @@ const ProgramManagement = ({ embedded = false }) => {
             >
               {isCreatingProgram ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Creating...
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating…
                 </>
               ) : (
                 <>
@@ -1331,7 +1331,7 @@ const ProgramManagement = ({ embedded = false }) => {
           value={newProgramName}
           onChange={(e) => setNewProgramName(e.target.value)}
           className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-baylor-green focus:border-transparent"
-          placeholder="Enter program name..."
+          placeholder="Enter program name…"
           autoFocus
           onKeyDown={(e) => {
             if (e.key === "Enter") createNewProgram();
@@ -1373,7 +1373,7 @@ const ProgramManagement = ({ embedded = false }) => {
             </span>
           </>
         }
-        confirmText={isDeletingProgram ? "Deleting..." : "Delete Program"}
+        confirmText={isDeletingProgram ? "Deleting…" : "Delete Program"}
         confirmDisabled={isDeletingProgram}
         variant="danger"
         icon={Trash2}

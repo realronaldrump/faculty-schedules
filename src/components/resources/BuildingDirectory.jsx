@@ -5,6 +5,7 @@ import DirectorRoleBadge from "../shared/DirectorRoleBadge";
 import { useData } from "../../contexts/DataContext";
 import { usePeople } from "../../contexts/PeopleContext";
 import { buildOfficeBuildingData } from "../../utils/buildingDirectoryUtils";
+import { formatPhoneNumber, getPhoneHref } from "../../utils/directoryUtils";
 
 import SelectDropdown from "../SelectDropdown";
 const BuildingDirectory = ({ embedded = false }) => {
@@ -92,19 +93,6 @@ const BuildingDirectory = ({ embedded = false }) => {
     setExpandedBuildings(newExpanded);
   };
 
-  // Format phone number
-  const formatPhoneNumber = (phoneStr) => {
-    if (!phoneStr) return "-";
-    const cleaned = ("" + phoneStr).replace(/\D/g, "");
-    if (cleaned.length === 10) {
-      const match = cleaned.match(/^(\d{3})(\d{3})(\d{4})$/);
-      if (match) {
-        return `(${match[1]}) ${match[2]}-${match[3]}`;
-      }
-    }
-    return phoneStr;
-  };
-
   const totalPeople = Object.values(filteredData).reduce(
     (sum, building) => sum + building.people.length,
     0,
@@ -139,7 +127,7 @@ const BuildingDirectory = ({ embedded = false }) => {
             <Search size={16} className="text-gray-400" />
             <input
               type="text"
-              placeholder="Search by name, email, title, room, or office..."
+              placeholder="Search by name, email, title, room, or office…"
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               className="flex-1 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-baylor-green"
@@ -392,7 +380,13 @@ const BuildingDirectory = ({ embedded = false }) => {
                                       {person.phone && !person.hasNoPhone && (
                                         <div className="flex items-center gap-1">
                                           <Phone size={12} />
-                                          {formatPhoneNumber(person.phone)}
+                                          <a
+                                            href={getPhoneHref(person.phone)}
+                                            className="hover:text-baylor-green hover:underline"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            {formatPhoneNumber(person.phone)}
+                                          </a>
                                         </div>
                                       )}
                                       {person.hasNoPhone && (

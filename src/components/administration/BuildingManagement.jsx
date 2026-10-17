@@ -381,7 +381,7 @@ const BuildingManagement = () => {
               className="btn-primary disabled:opacity-50"
             >
               <Save size={18} />
-              {saving ? 'Saving...' : 'Save Building'}
+              {saving ? 'Saving…' : 'Save Building'}
             </button>
           </div>
         </div>
